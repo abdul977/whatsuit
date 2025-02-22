@@ -28,11 +28,15 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
-    private NotificationAdapter adapter;
+    private RecyclerView appHeadersRecyclerView;
+    private NotificationAdapter notificationAdapter;
+    private AppHeaderAdapter appHeaderAdapter;
     private TextView emptyView;
     private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
@@ -56,10 +60,26 @@ public class MainActivity extends AppCompatActivity {
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
 
-        // Set up RecyclerView
+        // Set up app headers RecyclerView
+        appHeadersRecyclerView = findViewById(R.id.appHeadersRecyclerView);
+        appHeaderAdapter = new AppHeaderAdapter(getPackageManager());
+        appHeaderAdapter.setOnAppHeaderClickListener(header -> {
+            // Find and select corresponding chip
+            int chipCount = filterChipGroup.getChildCount();
+            for (int i = 1; i < chipCount; i++) { // Start from 1 to skip "All Apps"
+                Chip chip = (Chip) filterChipGroup.getChildAt(i);
+                if (chip.getText().equals(header.appName)) {
+                    chip.setChecked(true);
+                    break;
+                }
+            }
+        });
+        appHeadersRecyclerView.setAdapter(appHeaderAdapter);
+
+        // Set up notifications RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new NotificationAdapter(getPackageManager());
-        recyclerView.setAdapter(adapter);
+        notificationAdapter = new NotificationAdapter();
+        recyclerView.setAdapter(notificationAdapter);
 
         // Initialize database
         notificationDao = AppDatabase.getDatabase(this).notificationDao();
@@ -84,7 +104,7 @@ public class MainActivity extends AppCompatActivity {
         // Setup app filter
         setupAppFilter();
         
-        // Load notifications
+        // Load notifications and update headers
         loadNotifications();
 
         // Handle window insets
@@ -159,12 +179,31 @@ public class MainActivity extends AppCompatActivity {
             notificationDao.getNotificationsForApp(selectedPackage);
         notificationsLiveData.observe(this, notifications -> {
             if (notifications != null && !notifications.isEmpty()) {
-                adapter.setNotifications(notifications);
+                notificationAdapter.setNotifications(notifications);
                 emptyView.setVisibility(View.GONE);
                 recyclerView.setVisibility(View.VISIBLE);
+
+                // Update app headers
+                Map<String, Integer> appCounts = new LinkedHashMap<>();
+                Map<String, String> appNames = new LinkedHashMap<>();
+                for (NotificationEntity notification : notifications) {
+                    appCounts.merge(notification.getPackageName(), 1, Integer::sum);
+                    appNames.putIfAbsent(notification.getPackageName(), notification.getAppName());
+                }
+
+                List<AppHeaderAdapter.AppHeader> headers = new ArrayList<>();
+                for (Map.Entry<String, Integer> entry : appCounts.entrySet()) {
+                    headers.add(new AppHeaderAdapter.AppHeader(
+                        entry.getKey(),
+                        appNames.get(entry.getKey()),
+                        entry.getValue()
+                    ));
+                }
+                appHeaderAdapter.setHeaders(headers);
             } else {
                 emptyView.setVisibility(View.VISIBLE);
                 recyclerView.setVisibility(View.GONE);
+                appHeaderAdapter.setHeaders(new ArrayList<>());
             }
         });
     }
