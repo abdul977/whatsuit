@@ -6,11 +6,16 @@ import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.DefaultItemAnimator;
+import androidx.recyclerview.widget.DiffUtil;
+
+import com.google.android.material.chip.Chip;
 
 import com.example.whatsuit.data.NotificationEntity;
 
@@ -28,6 +33,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
 
     public NotificationAdapter(PackageManager packageManager) {
         this.packageManager = packageManager;
+        setHasStableIds(true);
     }
 
     @NonNull
@@ -50,8 +56,12 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
             AppHeader header = (AppHeader) items.get(position);
             AppHeaderViewHolder headerHolder = (AppHeaderViewHolder) holder;
             
+            // Configure app header
             headerHolder.appName.setText(header.appName);
             headerHolder.notificationCount.setText(String.valueOf(header.count));
+            
+            // Apply material transition animations
+            headerHolder.itemView.setTransitionName("header_" + header.packageName);
             
             try {
                 Drawable icon = packageManager.getApplicationIcon(header.packageName);
@@ -59,10 +69,23 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
             } catch (PackageManager.NameNotFoundException e) {
                 headerHolder.appIcon.setImageResource(R.drawable.ic_app_placeholder);
             }
+
+            // Style the count chip
+            Chip countChip = headerHolder.notificationCount;
+            countChip.setText(String.valueOf(header.count));
+            countChip.setEnsureMinTouchTargetSize(false);
+            countChip.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            countChip.setCloseIconVisible(false);
+            countChip.setClickable(false);
+
         } else {
             NotificationEntity notification = (NotificationEntity) items.get(position);
             NotificationViewHolder notificationHolder = (NotificationViewHolder) holder;
             
+            // Apply material transitions
+            notificationHolder.itemView.setTransitionName("notification_" + notification.getId());
+            
+            // Bind notification data
             notificationHolder.notificationTitle.setText(notification.getTitle());
             notificationHolder.notificationContent.setText(notification.getContent());
             
@@ -72,6 +95,11 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
                 DateUtils.MINUTE_IN_MILLIS
             );
             notificationHolder.timestamp.setText(timeAgo);
+
+            // Add ripple effect
+            notificationHolder.itemView.setOnClickListener(v -> {
+                // TODO: Implement notification detail view
+            });
         }
     }
 
@@ -81,11 +109,22 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
     }
 
     @Override
+    public long getItemId(int position) {
+        Object item = items.get(position);
+        if (item instanceof AppHeader) {
+            return ((AppHeader) item).packageName.hashCode();
+        } else {
+            return ((NotificationEntity) item).getId();
+        }
+    }
+
+    @Override
     public int getItemCount() {
         return items.size();
     }
 
     public void setNotifications(List<NotificationEntity> notifications) {
+        List<Object> oldItems = new ArrayList<>(items);
         items.clear();
         
         // Group notifications by app
@@ -110,7 +149,59 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
             }
         }
         
-        notifyDataSetChanged();
+        // Calculate the difference and animate changes
+        calculateDiff(oldItems, items);
+    }
+
+    private void calculateDiff(List<Object> oldItems, List<Object> newItems) {
+        DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return oldItems.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return newItems.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                Object oldItem = oldItems.get(oldItemPosition);
+                Object newItem = newItems.get(newItemPosition);
+                
+                if (oldItem instanceof AppHeader && newItem instanceof AppHeader) {
+                    return ((AppHeader) oldItem).packageName.equals(
+                        ((AppHeader) newItem).packageName);
+                } else if (oldItem instanceof NotificationEntity && 
+                         newItem instanceof NotificationEntity) {
+                    return ((NotificationEntity) oldItem).getId() == 
+                        ((NotificationEntity) newItem).getId();
+                }
+                return false;
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Object oldItem = oldItems.get(oldItemPosition);
+                Object newItem = newItems.get(newItemPosition);
+                
+                if (oldItem instanceof AppHeader && newItem instanceof AppHeader) {
+                    AppHeader oldHeader = (AppHeader) oldItem;
+                    AppHeader newHeader = (AppHeader) newItem;
+                    return oldHeader.count == newHeader.count &&
+                           oldHeader.appName.equals(newHeader.appName);
+                } else if (oldItem instanceof NotificationEntity && 
+                         newItem instanceof NotificationEntity) {
+                    NotificationEntity oldNotif = (NotificationEntity) oldItem;
+                    NotificationEntity newNotif = (NotificationEntity) newItem;
+                    return oldNotif.getTitle().equals(newNotif.getTitle()) &&
+                           oldNotif.getContent().equals(newNotif.getContent()) &&
+                           oldNotif.getTimestamp() == newNotif.getTimestamp();
+                }
+                return false;
+            }
+        }).dispatchUpdatesTo(this);
     }
 
     static class AppHeader {
@@ -128,7 +219,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewH
     static class AppHeaderViewHolder extends RecyclerView.ViewHolder {
         ImageView appIcon;
         TextView appName;
-        TextView notificationCount;
+        Chip notificationCount;
 
         AppHeaderViewHolder(View itemView) {
             super(itemView);

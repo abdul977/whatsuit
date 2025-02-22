@@ -1,13 +1,9 @@
 package com.example.whatsuit;
 
-import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -25,7 +21,11 @@ import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.appbar.AppBarLayout;
+import com.google.android.material.appbar.CollapsingToolbarLayout;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,9 +36,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView emptyView;
     private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
-    private Spinner appFilterSpinner;
+    private ChipGroup filterChipGroup;
     private String selectedPackage = null;
     private List<AppInfo> appInfoList = new ArrayList<>();
+    private ExtendedFloatingActionButton fab;
+    private AppBarLayout appBarLayout;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,10 +50,11 @@ public class MainActivity extends AppCompatActivity {
         
         // Initialize views
         recyclerView = findViewById(R.id.notificationsRecyclerView);
-        appFilterSpinner = findViewById(R.id.appFilterSpinner);
+        filterChipGroup = findViewById(R.id.filterChipGroup);
         emptyView = findViewById(R.id.emptyView);
         swipeRefresh = findViewById(R.id.swipeRefresh);
-        FloatingActionButton fab = findViewById(R.id.fab);
+        fab = findViewById(R.id.fab);
+        appBarLayout = findViewById(R.id.appBarLayout);
 
         // Set up RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -66,6 +69,9 @@ public class MainActivity extends AppCompatActivity {
             loadNotifications();
             swipeRefresh.setRefreshing(false);
         });
+
+        // Set up collapsing toolbar behavior
+        setupCollapsingToolbar();
 
         // FAB click listener
         fab.setOnClickListener(v -> showOptionsMenu());
@@ -89,43 +95,61 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void setupAppFilter() {
-        // Add "All Apps" option
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(this, 
-            android.R.layout.simple_spinner_item);
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerAdapter.add("All Apps");
-        appFilterSpinner.setAdapter(spinnerAdapter);
+    private void setupCollapsingToolbar() {
+        // Show/Hide FAB based on scroll
+        appBarLayout.addOnOffsetChangedListener((appBarLayout, verticalOffset) -> {
+            if (Math.abs(verticalOffset) == appBarLayout.getTotalScrollRange()) {
+                // Collapsed
+                fab.shrink();
+            } else {
+                // Expanded or in between
+                fab.extend();
+            }
+        });
+    }
 
-        // Load app list and store for reference
+    private void setupAppFilter() {
+        // Add "All Apps" chip
+        Chip allAppsChip = new Chip(this);
+        allAppsChip.setText("All Apps");
+        allAppsChip.setCheckable(true);
+        allAppsChip.setChecked(true);
+        filterChipGroup.addView(allAppsChip);
+
+        // Load app list and create chips
         notificationDao.getDistinctApps().observe(this, apps -> {
-            spinnerAdapter.clear();
-            spinnerAdapter.add("All Apps");
+            // Clear existing chips except "All Apps"
+            filterChipGroup.removeViews(1, filterChipGroup.getChildCount() - 1);
             appInfoList.clear();
             appInfoList.addAll(apps);
+
+            // Add chip for each app
             for (AppInfo app : apps) {
-                spinnerAdapter.add(app.getAppName());
+                Chip chip = new Chip(this);
+                chip.setText(app.getAppName());
+                chip.setCheckable(true);
+                filterChipGroup.addView(chip);
             }
         });
 
-        // Handle selection
-        appFilterSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position == 0) { // "All Apps"
-                    selectedPackage = null;
-                } else if (position - 1 < appInfoList.size()) {
-                    AppInfo selectedApp = appInfoList.get(position - 1);
-                    selectedPackage = selectedApp.getPackageName();
-                }
-                loadNotifications();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+        // Handle chip selection
+        filterChipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (checkedIds.isEmpty()) {
+                // Ensure "All Apps" is selected if nothing else is
+                allAppsChip.setChecked(true);
                 selectedPackage = null;
-                loadNotifications();
+            } else {
+                int selectedChipId = checkedIds.get(0);
+                Chip selectedChip = group.findViewById(selectedChipId);
+                int chipIndex = group.indexOfChild(selectedChip) - 1; // -1 for "All Apps" chip
+
+                if (chipIndex == -1) { // "All Apps" selected
+                    selectedPackage = null;
+                } else if (chipIndex < appInfoList.size()) {
+                    selectedPackage = appInfoList.get(chipIndex).getPackageName();
+                }
             }
+            loadNotifications();
         });
     }
 
