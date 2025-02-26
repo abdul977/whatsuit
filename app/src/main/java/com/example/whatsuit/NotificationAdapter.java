@@ -1,5 +1,6 @@
 package com.example.whatsuit;
 
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.text.format.DateUtils;
@@ -57,9 +58,13 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         );
         holder.timestamp.setText(timeAgo);
 
-        // Add ripple effect
+        // Add ripple effect and handle clicks
         holder.itemView.setOnClickListener(v -> {
-            // TODO: Implement notification detail view
+            Intent intent = new Intent(v.getContext(), NotificationDetailActivity.class);
+            intent.putExtra("notification_id", notification.getId());
+            
+            // Start activity with shared element transition
+            v.getContext().startActivity(intent);
         });
     }
 

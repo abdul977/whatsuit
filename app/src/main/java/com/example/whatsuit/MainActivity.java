@@ -232,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showOptionsMenu() {
-        String[] options = {"Clear All", "Settings", "About"};
+        String[] options = {"Clear All", "Auto-Reply Settings", "Settings", "About"};
         new AlertDialog.Builder(this)
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -240,9 +240,12 @@ public class MainActivity extends AppCompatActivity {
                             clearAllNotifications();
                             break;
                         case 1:
-                            // TODO: Open settings
+                            startActivity(new Intent(this, AutoReplySettingsActivity.class));
                             break;
                         case 2:
+                            // TODO: Open general settings
+                            break;
+                        case 3:
                             showAboutDialog();
                             break;
                     }

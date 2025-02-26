@@ -14,6 +14,8 @@ public class NotificationEntity {
     private String content;
     private long timestamp;
     private String icon;
+    private boolean autoReplied;
+    private String autoReplyContent;
 
     public NotificationEntity(String packageName, String appName, String title, String content, long timestamp, String icon) {
         this.packageName = packageName;
@@ -22,6 +24,8 @@ public class NotificationEntity {
         this.content = content;
         this.timestamp = timestamp;
         this.icon = icon;
+        this.autoReplied = false;
+        this.autoReplyContent = null;
     }
 
     // Getters and Setters
@@ -45,4 +49,10 @@ public class NotificationEntity {
     
     public String getIcon() { return icon; }
     public void setIcon(String icon) { this.icon = icon; }
+    
+    public boolean isAutoReplied() { return autoReplied; }
+    public void setAutoReplied(boolean autoReplied) { this.autoReplied = autoReplied; }
+    
+    public String getAutoReplyContent() { return autoReplyContent; }
+    public void setAutoReplyContent(String autoReplyContent) { this.autoReplyContent = autoReplyContent; }
 }
