@@ -1,9 +1,13 @@
 package com.example.whatsuit;
 
+import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -21,22 +25,19 @@ import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
-import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Calendar;
 import java.util.List;
-import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
-    private RecyclerView appHeadersRecyclerView;
-    private NotificationAdapter notificationAdapter;
-    private AppHeaderAdapter appHeaderAdapter;
+    private GroupedNotificationAdapter notificationAdapter;
     private TextView emptyView;
     private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
@@ -45,6 +46,8 @@ public class MainActivity extends AppCompatActivity {
     private List<AppInfo> appInfoList = new ArrayList<>();
     private ExtendedFloatingActionButton fab;
     private AppBarLayout appBarLayout;
+    private long startTime = 0;
+    private long endTime = Long.MAX_VALUE;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,25 +63,9 @@ public class MainActivity extends AppCompatActivity {
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
 
-        // Set up app headers RecyclerView
-        appHeadersRecyclerView = findViewById(R.id.appHeadersRecyclerView);
-        appHeaderAdapter = new AppHeaderAdapter(getPackageManager());
-        appHeaderAdapter.setOnAppHeaderClickListener(header -> {
-            // Find and select corresponding chip
-            int chipCount = filterChipGroup.getChildCount();
-            for (int i = 1; i < chipCount; i++) { // Start from 1 to skip "All Apps"
-                Chip chip = (Chip) filterChipGroup.getChildAt(i);
-                if (chip.getText().equals(header.appName)) {
-                    chip.setChecked(true);
-                    break;
-                }
-            }
-        });
-        appHeadersRecyclerView.setAdapter(appHeaderAdapter);
-
         // Set up notifications RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        notificationAdapter = new NotificationAdapter();
+        notificationAdapter = new GroupedNotificationAdapter(getPackageManager());
         recyclerView.setAdapter(notificationAdapter);
 
         // Initialize database
@@ -104,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
         // Setup app filter
         setupAppFilter();
         
-        // Load notifications and update headers
+        // Load notifications
         loadNotifications();
 
         // Handle window insets
@@ -115,35 +102,119 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_filter) {
+            showTimeFilterDialog();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void showTimeFilterDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_time_filter, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Filter by Time");
+        builder.setView(dialogView);
+
+        RadioGroup timeFilterGroup = dialogView.findViewById(R.id.timeFilterRadioGroup);
+        View customRangeLayout = dialogView.findViewById(R.id.customRangeLayout);
+        TextView startDateInput = dialogView.findViewById(R.id.startDateInput);
+        TextView endDateInput = dialogView.findViewById(R.id.endDateInput);
+
+        // Show/hide custom range inputs
+        timeFilterGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            customRangeLayout.setVisibility(
+                checkedId == R.id.customRangeRadio ? View.VISIBLE : View.GONE
+            );
+        });
+
+        // Setup date picker listeners
+        startDateInput.setOnClickListener(v -> showDatePicker(startDateInput, true));
+        endDateInput.setOnClickListener(v -> showDatePicker(endDateInput, false));
+
+        builder.setPositiveButton("Apply", (dialog, which) -> {
+            int selectedId = timeFilterGroup.getCheckedRadioButtonId();
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, 0);
+            cal.set(Calendar.MINUTE, 0);
+            cal.set(Calendar.SECOND, 0);
+            cal.set(Calendar.MILLISECOND, 0);
+
+            if (selectedId == R.id.allTimeRadio) {
+                startTime = 0;
+                endTime = Long.MAX_VALUE;
+            } else if (selectedId == R.id.yesterdayRadio) {
+                cal.add(Calendar.DAY_OF_YEAR, -1);
+                startTime = cal.getTimeInMillis();
+                cal.add(Calendar.DAY_OF_YEAR, 1);
+                endTime = cal.getTimeInMillis();
+            } else if (selectedId == R.id.lastWeekRadio) {
+                cal.add(Calendar.WEEK_OF_YEAR, -1);
+                startTime = cal.getTimeInMillis();
+                endTime = System.currentTimeMillis();
+            } else if (selectedId == R.id.lastMonthRadio) {
+                cal.add(Calendar.MONTH, -1);
+                startTime = cal.getTimeInMillis();
+                endTime = System.currentTimeMillis();
+            } else if (selectedId == R.id.lastYearRadio) {
+                cal.add(Calendar.YEAR, -1);
+                startTime = cal.getTimeInMillis();
+                endTime = System.currentTimeMillis();
+            }
+            loadNotifications();
+        });
+
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private void showDatePicker(TextView dateInput, boolean isStartDate) {
+        Calendar cal = Calendar.getInstance();
+        DatePickerDialog datePickerDialog = new DatePickerDialog(
+            this,
+            (view, year, month, dayOfMonth) -> {
+                Calendar selectedDate = Calendar.getInstance();
+                selectedDate.set(year, month, dayOfMonth, 0, 0, 0);
+                if (isStartDate) startTime = selectedDate.getTimeInMillis();
+                else endTime = selectedDate.getTimeInMillis() + 86400000; // Add 24 hours
+                dateInput.setText(String.format("%d/%d/%d", month + 1, dayOfMonth, year));
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        );
+        datePickerDialog.show();
+    }
+
     private void setupCollapsingToolbar() {
-        // Show/Hide FAB based on scroll
         appBarLayout.addOnOffsetChangedListener((appBarLayout, verticalOffset) -> {
             if (Math.abs(verticalOffset) == appBarLayout.getTotalScrollRange()) {
-                // Collapsed
                 fab.shrink();
             } else {
-                // Expanded or in between
                 fab.extend();
             }
         });
     }
 
     private void setupAppFilter() {
-        // Add "All Apps" chip
         Chip allAppsChip = new Chip(this);
         allAppsChip.setText("All Apps");
         allAppsChip.setCheckable(true);
         allAppsChip.setChecked(true);
         filterChipGroup.addView(allAppsChip);
 
-        // Load app list and create chips
         notificationDao.getDistinctApps().observe(this, apps -> {
-            // Clear existing chips except "All Apps"
             filterChipGroup.removeViews(1, filterChipGroup.getChildCount() - 1);
             appInfoList.clear();
             appInfoList.addAll(apps);
 
-            // Add chip for each app
             for (AppInfo app : apps) {
                 Chip chip = new Chip(this);
                 chip.setText(app.getAppName());
@@ -152,18 +223,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Handle chip selection
         filterChipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.isEmpty()) {
-                // Ensure "All Apps" is selected if nothing else is
                 allAppsChip.setChecked(true);
                 selectedPackage = null;
             } else {
                 int selectedChipId = checkedIds.get(0);
                 Chip selectedChip = group.findViewById(selectedChipId);
-                int chipIndex = group.indexOfChild(selectedChip) - 1; // -1 for "All Apps" chip
+                int chipIndex = group.indexOfChild(selectedChip) - 1;
 
-                if (chipIndex == -1) { // "All Apps" selected
+                if (chipIndex == -1) {
                     selectedPackage = null;
                 } else if (chipIndex < appInfoList.size()) {
                     selectedPackage = appInfoList.get(chipIndex).getPackageName();
@@ -173,37 +242,29 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
+
     private void loadNotifications() {
-        LiveData<List<NotificationEntity>> notificationsLiveData = selectedPackage == null ?
-            notificationDao.getAllNotifications() :
+        // Remove any existing observer from the previous LiveData
+        if (currentNotificationsLiveData != null) {
+            currentNotificationsLiveData.removeObservers(this);
+        }
+
+        // Get new LiveData based on current filters
+        currentNotificationsLiveData = selectedPackage == null ?
+            notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
             notificationDao.getNotificationsForApp(selectedPackage);
-        notificationsLiveData.observe(this, notifications -> {
+
+        // Observe the new LiveData
+        currentNotificationsLiveData.observe(this, notifications -> {
             if (notifications != null && !notifications.isEmpty()) {
-                notificationAdapter.setNotifications(notifications);
+                notificationAdapter.updateNotifications(notifications);
                 emptyView.setVisibility(View.GONE);
                 recyclerView.setVisibility(View.VISIBLE);
-
-                // Update app headers
-                Map<String, Integer> appCounts = new LinkedHashMap<>();
-                Map<String, String> appNames = new LinkedHashMap<>();
-                for (NotificationEntity notification : notifications) {
-                    appCounts.merge(notification.getPackageName(), 1, Integer::sum);
-                    appNames.putIfAbsent(notification.getPackageName(), notification.getAppName());
-                }
-
-                List<AppHeaderAdapter.AppHeader> headers = new ArrayList<>();
-                for (Map.Entry<String, Integer> entry : appCounts.entrySet()) {
-                    headers.add(new AppHeaderAdapter.AppHeader(
-                        entry.getKey(),
-                        appNames.get(entry.getKey()),
-                        entry.getValue()
-                    ));
-                }
-                appHeaderAdapter.setHeaders(headers);
             } else {
+                notificationAdapter.updateNotifications(new ArrayList<>());
                 emptyView.setVisibility(View.VISIBLE);
                 recyclerView.setVisibility(View.GONE);
-                appHeaderAdapter.setHeaders(new ArrayList<>());
             }
         });
     }
