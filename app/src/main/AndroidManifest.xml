@@ -56,6 +56,13 @@
             android:exported="false"
             android:label="Auto-Reply Settings"
             android:parentActivityName=".MainActivity" />
+
+        <activity
+            android:name=".GeminiConfigActivity"
+            android:exported="false"
+            android:label="Gemini Configuration"
+            android:parentActivityName=".MainActivity" />
+
     </application>
 
 </manifest>
