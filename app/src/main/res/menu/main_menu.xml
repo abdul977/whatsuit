@@ -8,4 +8,10 @@
         android:title="Filter"
         app:showAsAction="always"/>
 
+    <item
+        android:id="@+id/action_gemini_config"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Gemini Configuration"
+        app:showAsAction="never"/>
+
 </menu>
