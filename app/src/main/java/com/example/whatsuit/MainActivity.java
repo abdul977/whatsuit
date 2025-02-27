@@ -25,6 +25,7 @@ import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.util.AutoReplyManager;
 import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
@@ -41,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView emptyView;
     private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
+    private AutoReplyManager autoReplyManager;
     private ChipGroup filterChipGroup;
     private String selectedPackage = null;
     private List<AppInfo> appInfoList = new ArrayList<>();
@@ -63,9 +65,12 @@ public class MainActivity extends AppCompatActivity {
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
 
+        // Initialize managers
+        autoReplyManager = new AutoReplyManager(this);
+
         // Set up notifications RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        notificationAdapter = new GroupedNotificationAdapter(getPackageManager());
+        notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
         recyclerView.setAdapter(notificationAdapter);
 
         // Initialize database
@@ -331,5 +336,13 @@ public class MainActivity extends AppCompatActivity {
                 .setMessage("Notification History App\nVersion 1.0")
                 .setPositiveButton("OK", null)
                 .show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (autoReplyManager != null) {
+            autoReplyManager.shutdown();
+        }
     }
 }

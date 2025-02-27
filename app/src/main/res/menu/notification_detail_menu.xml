@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    
+    <item
+        android:id="@+id/action_filter"
+        android:icon="@android:drawable/ic_menu_sort_by_size"
+        android:title="Filter"
+        app:showAsAction="always"/>
+
+    <item
+        android:id="@+id/action_toggle_auto_reply"
+        android:icon="@android:drawable/ic_menu_set_as"
+        android:title="Toggle Auto-Reply"
+        app:showAsAction="ifRoom"/>
+
+</menu>

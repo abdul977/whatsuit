@@ -73,9 +73,26 @@ public class NotificationService extends NotificationListenerService {
 
                 // Check if this is a messaging app notification and auto-reply is enabled
                 SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
-                if (isMessagingApp(packageName) && prefs.getBoolean("auto_reply_enabled", false)) {
-                    Log.d(TAG, "Processing message for auto-reply. App: " + appName + ", Content: " + content);
-                    handleAutoReply(sbn, notificationEntity);
+                boolean shouldAutoReply = isMessagingApp(packageName) && 
+                                      prefs.getBoolean("auto_reply_enabled", false);
+                
+                if (shouldAutoReply) {
+                    String phoneNumber = "";
+                    String titlePrefix = "";
+                    
+                    if (packageName.contains("whatsapp") && content != null && content.matches(".*[0-9+].*")) {
+                        // Extract numbers, plus signs, and hyphens, then clean up
+                        String extracted = content.replaceAll("[^0-9+\\-]", "");
+                        // Remove all non-digits for final comparison
+                        phoneNumber = extracted.replaceAll("[^0-9]", "");
+                    } else if (title != null && !title.isEmpty()) {
+                        titlePrefix = title.substring(0, Math.min(5, title.length()));
+                    }
+                    
+                    if (!database.notificationDao().isAutoReplyDisabled(packageName, phoneNumber, titlePrefix)) {
+                        Log.d(TAG, "Processing message for auto-reply. App: " + appName + ", Content: " + content);
+                        handleAutoReply(sbn, notificationEntity);
+                    }
                 }
 
                 // Insert and get the ID
@@ -85,7 +102,8 @@ public class NotificationService extends NotificationListenerService {
                 Intent deepLinkIntent = new Intent(Intent.ACTION_VIEW, 
                     Uri.parse("whatsuit://notification/" + id));
                 PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
-                    deepLinkIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    deepLinkIntent, 
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
                 // Add the deep link to the original notification
                 if (notification.extras != null) {
@@ -147,6 +165,27 @@ public class NotificationService extends NotificationListenerService {
     }
 
     private void generateAndSendReply(NotificationEntity notification, Notification.Action replyAction) {
+        String phoneNumber = "";
+        String titlePrefix = "";
+        
+        if (notification.getPackageName().contains("whatsapp") && 
+            notification.getContent() != null && 
+            notification.getContent().matches(".*[0-9+].*")) {
+            // Extract numbers, plus signs, and hyphens, then clean up
+            String extracted = notification.getContent().replaceAll("[^0-9+\\-]", "");
+            // Remove all non-digits for final comparison
+            phoneNumber = extracted.replaceAll("[^0-9]", "");
+        } else if (notification.getTitle() != null && !notification.getTitle().isEmpty()) {
+            titlePrefix = notification.getTitle().substring(0, Math.min(5, notification.getTitle().length()));
+        }
+        
+        // Check if auto-reply is disabled for this conversation
+        if (database.notificationDao().isAutoReplyDisabled(
+                notification.getPackageName(), phoneNumber, titlePrefix)) {
+            Log.d(TAG, "Auto-reply is disabled for this conversation");
+            return;
+        }
+        
         geminiService.generateReply(notification.getContent(), new GeminiService.ResponseCallback() {
             @Override
             public void onPartialResponse(String text) {

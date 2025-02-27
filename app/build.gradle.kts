@@ -49,6 +49,7 @@ android {
 
 dependencies {
     implementation(libs.core.ktx)
+    implementation(libs.cronet.embedded)
     val room_version = "2.6.1"
     
     implementation(libs.appcompat)

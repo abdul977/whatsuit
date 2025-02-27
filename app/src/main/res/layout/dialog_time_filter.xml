@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Preset Time Filters -->
+    <RadioGroup
+        android:id="@+id/timeFilterRadioGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp">
+
+        <RadioButton
+            android:id="@+id/allTimeRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="All Time"/>
+
+        <RadioButton
+            android:id="@+id/todayRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Today"
+            android:layout_marginTop="8dp"/>
+
+        <RadioButton
+            android:id="@+id/yesterdayRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Yesterday"/>
+
+        <RadioButton
+            android:id="@+id/lastWeekRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last Week"/>
+
+        <RadioButton
+            android:id="@+id/lastMonthRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last Month"/>
+
+        <RadioButton
+            android:id="@+id/lastYearRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last Year"/>
+
+        <RadioButton
+            android:id="@+id/customRangeRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Custom Range"/>
+
+    </RadioGroup>
+
+    <!-- Custom Date Range -->
+    <LinearLayout
+        android:id="@+id/customRangeLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/startDateInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Start Date"
+                android:focusable="false"/>
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/endDateInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="End Date"
+                android:focusable="false"/>
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+    </LinearLayout>
+
+    <!-- Dialog Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="16dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cancel"
+            style="@style/Widget.MaterialComponents.Button.TextButton"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/applyButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apply"/>
+
+    </LinearLayout>
+</LinearLayout>

@@ -16,6 +16,7 @@ public class NotificationEntity {
     private String icon;
     private boolean autoReplied;
     private String autoReplyContent;
+    private boolean autoReplyDisabled;
 
     public NotificationEntity(String packageName, String appName, String title, String content, long timestamp, String icon) {
         this.packageName = packageName;
@@ -26,6 +27,7 @@ public class NotificationEntity {
         this.icon = icon;
         this.autoReplied = false;
         this.autoReplyContent = null;
+        this.autoReplyDisabled = false;
     }
 
     // Getters and Setters
@@ -55,4 +57,7 @@ public class NotificationEntity {
     
     public String getAutoReplyContent() { return autoReplyContent; }
     public void setAutoReplyContent(String autoReplyContent) { this.autoReplyContent = autoReplyContent; }
+    
+    public boolean isAutoReplyDisabled() { return autoReplyDisabled; }
+    public void setAutoReplyDisabled(boolean autoReplyDisabled) { this.autoReplyDisabled = autoReplyDisabled; }
 }

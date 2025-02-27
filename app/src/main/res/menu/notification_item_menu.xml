@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_toggle_auto_reply"
+        android:title="Disable Auto-Reply"
+        android:icon="@drawable/ic_auto_reply"/>
+    
+    <item
+        android:id="@+id/action_view_details"
+        android:title="View Details"
+        android:icon="@drawable/ic_details"/>
+</menu>

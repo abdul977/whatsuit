@@ -2,12 +2,18 @@ package com.example.whatsuit.adapter;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
@@ -16,7 +22,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.whatsuit.NotificationDetailActivity;
 import com.example.whatsuit.R;
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.util.AutoReplyManager;
 import com.google.android.material.chip.Chip;
+
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,9 +39,13 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     private final List<Object> items = new ArrayList<>();
     private final Map<String, Boolean> expandedGroups = new HashMap<>();
     private final Map<String, List<NotificationEntity>> groupedNotifications = new HashMap<>();
+    private final AutoReplyManager autoReplyManager;
+    private final Handler mainHandler;
 
-    public GroupedNotificationAdapter(PackageManager packageManager) {
+    public GroupedNotificationAdapter(PackageManager packageManager, AutoReplyManager autoReplyManager) {
         this.packageManager = packageManager;
+        this.autoReplyManager = autoReplyManager;
+        this.mainHandler = new Handler(Looper.getMainLooper());
         setHasStableIds(true);
     }
 
@@ -55,7 +67,7 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         if (holder instanceof HeaderViewHolder) {
             bindHeaderViewHolder((HeaderViewHolder) holder, (GroupHeader) items.get(position));
         } else {
-            bindNotificationViewHolder((NotificationViewHolder) holder, (NotificationEntity) items.get(position));
+            bindNotificationViewHolder((NotificationViewHolder) holder, position);
         }
     }
 
@@ -77,15 +89,114 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         holder.expandIcon.setRotation(isExpanded ? 180 : 0);
     }
 
-    private void bindNotificationViewHolder(NotificationViewHolder holder, NotificationEntity notification) {
+    private void bindNotificationViewHolder(NotificationViewHolder holder, int position) {
+        NotificationEntity notification = (NotificationEntity) items.get(position);
         holder.notificationTitle.setText(notification.getTitle());
         holder.notificationContent.setText(notification.getContent());
         
+        // Set up menu button
+        holder.menuButton.setOnClickListener(v -> showPopupMenu(v, notification));
+        
+        // Update auto-reply status chip
+        updateAutoReplyStatusAsync(holder, notification);
+
+        // Set click listener for the whole card
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(v.getContext(), NotificationDetailActivity.class);
             intent.putExtra("notification_id", notification.getId());
             v.getContext().startActivity(intent);
         });
+    }
+
+    private void showPopupMenu(View view, NotificationEntity notification) {
+        PopupMenu popup = new PopupMenu(view.getContext(), view);
+        MenuInflater inflater = popup.getMenuInflater();
+        inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
+
+        // Update menu item text based on current auto-reply status
+        MenuItem autoReplyItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
+        autoReplyItem.setEnabled(false); // Disable until we get the status
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(notification.getPackageName(), info.phoneNumber, info.titlePrefix,
+            isDisabled -> mainHandler.post(() -> {
+        
+        autoReplyItem.setTitle(isDisabled ? "Enable Auto-Reply" : "Disable Auto-Reply");
+                autoReplyItem.setEnabled(true);
+            }));
+
+        popup.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_toggle_auto_reply) {
+                toggleAutoReply(notification);
+                return true;
+            } else if (item.getItemId() == R.id.action_view_details) {
+                Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
+                intent.putExtra("notification_id", notification.getId());
+                view.getContext().startActivity(intent);
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
+    }
+
+    private void toggleAutoReply(NotificationEntity notification) {
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        autoReplyManager.toggleAutoReply(notification.getPackageName(), info.phoneNumber, info.titlePrefix, 
+            isDisabled -> notifyDataSetChanged());
+    }
+
+    private void updateAutoReplyStatusAsync(NotificationViewHolder holder, NotificationEntity notification) {
+        // Set a loading state or default state if needed
+        holder.autoReplyStatusChip.setEnabled(false); // Disable until we get the result
+        holder.autoReplyStatusChip.setText("Loading...");
+        holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
+
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(
+notification.getPackageName(), 
+info.phoneNumber, info.titlePrefix,
+            isDisabled -> {
+                mainHandler.post(() -> {
+                holder.autoReplyStatusChip.setText(isDisabled ? "Auto-reply disabled" : "Auto-reply enabled");
+                holder.autoReplyStatusChip.setEnabled(true);
+                
+                holder.autoReplyStatusChip.setChipBackgroundColorResource(isDisabled ? 
+                    R.color.md_theme_errorContainer : R.color.md_theme_primaryContainer);
+                holder.autoReplyStatusChip.setTextColor(holder.autoReplyStatusChip.getContext().getColor(isDisabled ? 
+                    R.color.md_theme_onErrorContainer : R.color.md_theme_onPrimaryContainer));
+                });
+            });
+    }
+
+    private static class ExtractedInfo {
+        final String phoneNumber;
+        final String titlePrefix;
+
+        ExtractedInfo(String phoneNumber, String titlePrefix) {
+            this.phoneNumber = phoneNumber;
+            this.titlePrefix = titlePrefix;
+        }
+    }
+
+    private ExtractedInfo extractIdentifierInfo(NotificationEntity notification) {
+        String phoneNumber = "";
+        String titlePrefix = "";
+        
+        if (notification.getPackageName().contains("whatsapp") && 
+            notification.getContent() != null && 
+            notification.getContent().matches(".*[0-9+].*")) {
+            String content = notification.getContent();
+            String extracted = content.replaceAll("[^0-9+\\-]", "");
+            phoneNumber = extracted.replaceAll("[^0-9]", "");
+        } else if (notification.getTitle() != null && !notification.getTitle().isEmpty()) {
+            titlePrefix = notification.getTitle().substring(0, 
+                Math.min(5, notification.getTitle().length()));
+        }
+        
+        return new ExtractedInfo(phoneNumber, titlePrefix);
     }
 
     @Override
@@ -109,23 +220,19 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     public void updateNotifications(List<NotificationEntity> notifications) {
-        // Save current expanded states
         Map<String, Boolean> previousExpandedStates = new HashMap<>(expandedGroups);
         
-        // Group notifications by package name
         groupedNotifications.clear();
         for (NotificationEntity notification : notifications) {
             String key = notification.getPackageName();
             groupedNotifications.computeIfAbsent(key, k -> new ArrayList<>()).add(notification);
         }
 
-        // Build new items list with headers and notifications
         List<Object> newItems = new ArrayList<>();
         for (Map.Entry<String, List<NotificationEntity>> entry : groupedNotifications.entrySet()) {
             String packageName = entry.getKey();
             List<NotificationEntity> groupNotifications = entry.getValue();
             
-            // Add header
             GroupHeader header = new GroupHeader(
                 packageName,
                 groupNotifications.get(0).getAppName(),
@@ -133,17 +240,14 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             );
             newItems.add(header);
 
-            // Preserve expanded state or collapse by default
             boolean wasExpanded = previousExpandedStates.getOrDefault(packageName, false);
             expandedGroups.put(packageName, wasExpanded);
 
-            // Add notifications if group is expanded
             if (wasExpanded) {
                 newItems.addAll(groupNotifications);
             }
         }
 
-        // Calculate diff and update
         DiffUtil.calculateDiff(new NotificationDiffCallback(items, newItems))
                .dispatchUpdatesTo(this);
         
@@ -158,15 +262,12 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         List<NotificationEntity> notifications = groupedNotifications.get(packageName);
         if (notifications != null) {
             if (!expanded) {
-                // Insert notifications after header
                 items.addAll(headerPosition + 1, notifications);
                 notifyItemRangeInserted(headerPosition + 1, notifications.size());
             } else {
-                // Remove notifications after header
                 items.subList(headerPosition + 1, headerPosition + 1 + notifications.size()).clear();
                 notifyItemRangeRemoved(headerPosition + 1, notifications.size());
             }
-            // Update header to reflect new expanded state
             notifyItemChanged(headerPosition);
         }
     }
@@ -201,11 +302,15 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     static class NotificationViewHolder extends RecyclerView.ViewHolder {
         TextView notificationTitle;
         TextView notificationContent;
+        ImageButton menuButton;
+        Chip autoReplyStatusChip;
 
         NotificationViewHolder(View itemView) {
             super(itemView);
             notificationTitle = itemView.findViewById(R.id.notificationTitle);
             notificationContent = itemView.findViewById(R.id.notificationContent);
+            menuButton = itemView.findViewById(R.id.menuButton);
+            autoReplyStatusChip = itemView.findViewById(R.id.autoReplyStatusChip);
         }
     }
 
