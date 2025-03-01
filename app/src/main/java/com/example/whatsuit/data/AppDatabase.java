@@ -13,9 +13,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
         NotificationEntity.class,
         GeminiConfig.class,
         ConversationHistory.class,
-        PromptTemplate.class
+        PromptTemplate.class,
+        AppSettingEntity.class
     },
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -23,6 +24,8 @@ public abstract class AppDatabase extends RoomDatabase {
     
     public abstract NotificationDao notificationDao();
     public abstract GeminiDao geminiDao();
+    public abstract AppSettingDao appSettingDao();
+    public abstract ConversationHistoryDao conversationHistoryDao();
 
     static final Migration MIGRATION_1_2 = new Migration(1, 2) {
         @Override
@@ -87,6 +90,44 @@ public abstract class AppDatabase extends RoomDatabase {
         }
     };
 
+    static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            database.execSQL(
+                "CREATE TABLE IF NOT EXISTS app_settings (" +
+                "packageName TEXT PRIMARY KEY NOT NULL, " +
+                "appName TEXT NOT NULL, " +
+                "autoReplyEnabled INTEGER NOT NULL DEFAULT 0)" 
+            );
+        }
+    };
+    
+    static final Migration MIGRATION_4_5 = new Migration(4, 5) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Add conversationId column if it doesn't exist
+            database.execSQL("ALTER TABLE notifications ADD COLUMN conversationId TEXT");
+            
+            // Update existing records with generated thread IDs
+            database.execSQL(
+                "UPDATE notifications " +
+                "SET conversationId = packageName || '_' || " +
+                "CASE " +
+                "    WHEN packageName LIKE '%whatsapp%' AND title LIKE '%[0-9+]%' " +
+                "    THEN replace(replace(replace(title, '+', ''), '-', ''), ' ', '') " +
+                "    ELSE title " +
+                "END " +
+                "WHERE conversationId IS NULL"
+            );
+            
+            // Create index for faster lookups
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_notifications_conversationId " +
+                "ON notifications(conversationId)"
+            );
+        }
+    };
+
     public static AppDatabase getDatabase(final Context context) {
         if (INSTANCE == null) {
             synchronized (AppDatabase.class) {
@@ -96,11 +137,15 @@ public abstract class AppDatabase extends RoomDatabase {
                             AppDatabase.class,
                             "notification_database"
                     )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build();
                 }
             }
         }
         return INSTANCE;
+    }
+
+    public ConversationHistoryDao getConversationHistoryDao() {
+        return conversationHistoryDao();
     }
 }
