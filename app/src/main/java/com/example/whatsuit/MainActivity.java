@@ -38,7 +38,6 @@ import com.example.whatsuit.util.AutoReplyManager;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.example.whatsuit.adapter.ConversationHistoryAdapter;
 import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
@@ -125,10 +124,10 @@ public class MainActivity extends AppCompatActivity {
 
     public void showConversationHistory(NotificationEntity notification) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_conversation_history, null);
-        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
         TextView titleView = dialogView.findViewById(R.id.historyTitle);
+        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
         RecyclerView historyRecyclerView = dialogView.findViewById(R.id.historyRecyclerView);
-
+        
         titleView.setText("Conversation History - " + notification.getTitle());
         emptyStateText.setText("Loading conversation history...");
         
@@ -140,21 +139,24 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
                 .setPositiveButton("Close", null)
+                .setNeutralButton("Close", null)
                 .create();
 
         dialog.show();
 
-        // Use LiveData to observe related notifications for this notification
-        AppDatabase db = AppDatabase.getDatabase(this);
-        
-        // Start with related notifications LiveData
-        db.notificationDao()
-            .getRelatedNotifications(notification.getId())
-            .observe(this, relatedNotifications -> {
-                if (relatedNotifications != null && !relatedNotifications.isEmpty()) {
-                    // Convert to ConversationHistory objects for the adapter
-                    List<ConversationHistory> historyList = convertToHistory(notification, relatedNotifications);
-                    historyAdapter.setHistory(historyList);
+        // Use a background thread to get conversation history directly
+        new Thread(() -> {
+            final AppDatabase db = AppDatabase.getDatabase(this);
+            final long notificationId = notification.getId();
+            
+            // Get conversation history directly using Room's synchronous query
+            final List<ConversationHistory> history = db.getConversationHistoryDao()
+                    .getHistoryForNotificationSync(notificationId);
+            
+            // Update UI on main thread
+            runOnUiThread(() -> {
+                if (history != null && !history.isEmpty()) {
+                    historyAdapter.setHistory(history);
                     historyRecyclerView.setVisibility(View.VISIBLE);
                     emptyStateText.setVisibility(View.GONE);
                 } else {
@@ -163,6 +165,7 @@ public class MainActivity extends AppCompatActivity {
                     emptyStateText.setText("No conversation history available");
                 }
             });
+        }).start();
     }
 
     @Override
@@ -441,35 +444,6 @@ public class MainActivity extends AppCompatActivity {
                 .setMessage("Notification History App\nVersion 1.0")
                 .setPositiveButton("OK", null)
                 .show();
-    }
-
-    // Helper method to convert NotificationEntity objects to ConversationHistory objects
-    private List<ConversationHistory> convertToHistory(NotificationEntity mainNotification, List<NotificationEntity> related) {
-        List<ConversationHistory> historyList = new ArrayList<>();
-        
-        // Add current notification
-        ConversationHistory current = new ConversationHistory();
-        current.setNotificationId(mainNotification.getId());
-        current.setConversationId(mainNotification.getConversationId());
-        current.setMessage(mainNotification.getContent());
-        current.setResponse(mainNotification.getAutoReplyContent() != null ? 
-                         mainNotification.getAutoReplyContent() : "");
-        current.setTimestamp(mainNotification.getTimestamp());
-        historyList.add(current);
-        
-        // Add related notifications
-        for (NotificationEntity notification : related) {
-            ConversationHistory history = new ConversationHistory();
-            history.setNotificationId(notification.getId());
-            history.setConversationId(notification.getConversationId());
-            history.setMessage(notification.getContent());
-            history.setResponse(notification.getAutoReplyContent() != null ? 
-                             notification.getAutoReplyContent() : "");
-            history.setTimestamp(notification.getTimestamp());
-            historyList.add(history);
-        }
-        
-        return historyList;
     }
 
     @Override
