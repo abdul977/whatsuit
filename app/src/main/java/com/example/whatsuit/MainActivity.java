@@ -143,21 +143,31 @@ public class MainActivity extends AppCompatActivity {
 
         dialog.show();
 
-        AppDatabase db = AppDatabase.getDatabase(this);
-        db.getConversationHistoryDao().getHistoryForNotification(notification.getId()).observe(this, history -> {
-            if (history != null && !history.isEmpty()) {
-                StringBuilder historyText = new StringBuilder();
-                for (int i = history.size() - 1; i >= 0; i--) {
-                    ConversationHistory entry = history.get(i);
-                    historyText.append("➤ Message: ").append(entry.getMessage()).append("\n\n");
-                    historyText.append("↳ Response: ").append(entry.getResponse()).append("\n\n");
-                    if (i > 0) historyText.append("-------------------\n\n");
+        // Use a background thread to get conversation history directly
+        new Thread(() -> {
+            final AppDatabase db = AppDatabase.getDatabase(this);
+            final long notificationId = notification.getId();
+            
+            // Get conversation history directly using Room's synchronous query
+            final List<ConversationHistory> history = db.getConversationHistoryDao()
+                    .getHistoryForNotificationSync(notificationId);
+            
+            // Update UI on main thread
+            runOnUiThread(() -> {
+                if (history != null && !history.isEmpty()) {
+                    StringBuilder historyText = new StringBuilder();
+                    for (int i = history.size() - 1; i >= 0; i--) {
+                        ConversationHistory entry = history.get(i);
+                        historyText.append("➤ Message: ").append(entry.getMessage()).append("\n\n");
+                        historyText.append("↳ Response: ").append(entry.getResponse()).append("\n\n");
+                        if (i > 0) historyText.append("-------------------\n\n");
+                    }
+                    historyView.setText(historyText.toString());
+                } else {
+                    historyView.setText("No conversation history available");
                 }
-                historyView.setText(historyText.toString());
-            } else {
-                historyView.setText("No conversation history available");
-            }
-        });
+            });
+        }).start();
     }
 
     @Override
