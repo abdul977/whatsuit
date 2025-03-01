@@ -9,4 +9,9 @@
         android:id="@+id/action_view_details"
         android:title="View Details"
         android:icon="@drawable/ic_details"/>
+
+    <item
+        android:id="@+id/action_view_history"
+        android:title="View History"
+        android:icon="@drawable/ic_history"/>
 </menu>

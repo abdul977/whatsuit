@@ -1,6 +1,7 @@
 package com.example.whatsuit.data;
 
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 @Entity(tableName = "notifications")
@@ -17,12 +18,21 @@ public class NotificationEntity {
     private boolean autoReplied;
     private String autoReplyContent;
     private boolean autoReplyDisabled;
+    private String conversationId;
+    
+    @Ignore
+    private long group_timestamp;
+    
+    @Ignore
+    private int group_count;
 
-    public NotificationEntity(String packageName, String appName, String title, String content, long timestamp, String icon) {
+    public NotificationEntity(String packageName, String appName, String title, String content,
+                            String conversationId, long timestamp, String icon) {
         this.packageName = packageName;
         this.appName = appName;
         this.title = title;
         this.content = content;
+        this.conversationId = conversationId;
         this.timestamp = timestamp;
         this.icon = icon;
         this.autoReplied = false;
@@ -31,6 +41,9 @@ public class NotificationEntity {
     }
 
     // Getters and Setters
+    public String getConversationId() { return conversationId; }
+    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
+    
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
     
@@ -60,4 +73,10 @@ public class NotificationEntity {
     
     public boolean isAutoReplyDisabled() { return autoReplyDisabled; }
     public void setAutoReplyDisabled(boolean autoReplyDisabled) { this.autoReplyDisabled = autoReplyDisabled; }
+    
+    public long getGroupTimestamp() { return group_timestamp; }
+    public void setGroupTimestamp(long group_timestamp) { this.group_timestamp = group_timestamp; }
+    
+    public int getGroupCount() { return group_count; }
+    public void setGroupCount(int group_count) { this.group_count = group_count; }
 }

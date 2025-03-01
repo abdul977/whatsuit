@@ -4,6 +4,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 
 /**
  * Entity class representing a conversation history entry.
@@ -50,12 +52,19 @@ data class ConversationHistory(
     /**
      * Returns true if this conversation entry is recent (within last 24 hours)
      */
+    @androidx.room.Ignore
     fun isRecent(): Boolean {
         val twentyFourHoursInMillis = 24 * 60 * 60 * 1000L
         return System.currentTimeMillis() - timestamp < twentyFourHoursInMillis
     }
 
+    fun toJson(): String = Gson().toJson(this)
+
     companion object {
+        fun fromJson(json: String): ConversationHistory {
+            return Gson().fromJson(json, ConversationHistory::class.java)
+        }
+
         /**
          * Creates a new conversation history entry
          */

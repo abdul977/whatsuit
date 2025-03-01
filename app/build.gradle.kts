@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
-    kotlin("android") version "1.9.24"
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.kapt)
 }
 
 android {
@@ -15,6 +16,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += mapOf(
+                    "room.schemaLocation" to "$projectDir/schemas",
+                    "room.incremental" to "true"
+                )
+            }
+        }
     }
 
     buildTypes {
@@ -36,14 +46,9 @@ android {
         freeCompilerArgs += listOf("-Xjvm-default=all")
     }
 
-    defaultConfig {
-        javaCompileOptions {
-            annotationProcessorOptions {
-                arguments += mapOf(
-                    "room.schemaLocation" to "$projectDir/schemas"
-                )
-            }
-        }
+    kapt {
+        correctErrorTypes = true
+        useBuildCache = true
     }
 }
 
@@ -62,7 +67,8 @@ dependencies {
     
     // Room components
     implementation("androidx.room:room-runtime:$room_version")
-    annotationProcessor("androidx.room:room-compiler:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    kapt("androidx.room:room-compiler:$room_version")
     
     // LiveData and ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")
@@ -72,6 +78,9 @@ dependencies {
     // RecyclerView
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.cardview:cardview:1.0.0")
+    
+    // JSON handling
+    implementation("com.google.code.gson:gson:2.10.1")
     
     // Gemini AI
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")

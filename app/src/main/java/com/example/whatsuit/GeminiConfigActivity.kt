@@ -1,4 +1,4 @@
-package com.example.whatsuit
+ package com.example.whatsuit
 
 import android.os.Bundle
 import android.text.Editable
@@ -20,11 +20,15 @@ import com.example.whatsuit.service.GeminiService
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resumeWithException
 
-class GeminiConfigActivity : AppCompatActivity() {
+ class GeminiConfigActivity : AppCompatActivity() {
     private companion object {
         private const val TAG = "GeminiConfigActivity"
+        private const val DEFAULT_API_KEY = "AIzaSyBoLBIqECGckfiRALFxXrD50a_94oFvl-0"
     }
 
     private lateinit var apiKeyLayout: TextInputLayout
@@ -141,14 +145,30 @@ class GeminiConfigActivity : AppCompatActivity() {
             try {
                 val config = geminiDao.getConfig()
                 if (config != null) {
+                    Log.d(TAG, "Loading existing config")
                     apiKeyInput.setText(config.apiKey)
                     maxHistoryInput.setText(config.maxHistoryPerThread.toString())
+                }
+ else {
+                    Log.d(TAG, "Creating default config with default API key")
+                    val defaultConfig = GeminiConfig.createDefault(DEFAULT_API_KEY)
+                    geminiDao.insertConfig(defaultConfig)
+                    apiKeyInput.setText(DEFAULT_API_KEY)
+                    maxHistoryInput.setText(defaultConfig.maxHistoryPerThread.toString())
                 }
 
                 val template = geminiDao.getActiveTemplate()
                 if (template != null) {
+                    Log.d(TAG, "Loading existing template: ${template.name}")
                     promptTemplateInput.setText(template.template)
                     templateNameInput.setText(template.name)
+                } else {
+                    Log.d(TAG, "Creating default prompt template")
+                    val defaultTemplate = PromptTemplate.createDefault()
+                    val templateId = geminiDao.insertTemplate(defaultTemplate)
+                    geminiDao.setActiveTemplate(templateId)
+                    promptTemplateInput.setText(defaultTemplate.template)
+                    templateNameInput.setText(defaultTemplate.name)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading config", e)
@@ -169,32 +189,52 @@ class GeminiConfigActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
+                // Clear any previous errors
+                apiKeyLayout.error = null
+                
+                // Create test config
                 val testConfig = GeminiConfig.createDefault(apiKey)
                 geminiDao.insertConfig(testConfig)
-                geminiService.initialize()
                 
-                var success = false
-                geminiService.generateReply(
-                    notificationId = -1,
-                    message = "Test message",
-                    object : GeminiService.ResponseCallback {
-                        override fun onPartialResponse(text: String) {}
-                        override fun onComplete(fullResponse: String) {
-                            success = true
-                        }
-                        override fun onError(error: Throwable) {
-                            throw error
-                        }
+                // Initialize service and test in IO context
+                withContext(Dispatchers.IO) {
+                    geminiService.initialize()
+                    
+                    // Test with sample message
+                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
+                        geminiService.generateReply(
+                            notificationId = -1,
+                            message = "Test message",
+                            object : GeminiService.ResponseCallback {
+                                override fun onPartialResponse(text: String) {}
+                                
+                                override fun onComplete(fullResponse: String) {
+                                    continuation.resume(Unit) {}
+                                }
+                                
+                                override fun onError(error: Throwable) {
+                                    continuation.resumeWithException(error)
+                                }
+                            }
+                        )
                     }
-                )
-
-                if (success) {
+                }
+                
+                // If we get here, the test was successful
+                withContext(Dispatchers.Main) {
                     Toast.makeText(this@GeminiConfigActivity, "API key is valid!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "API key test failed", e)
-                Toast.makeText(this@GeminiConfigActivity, "Invalid API key: ${e.message}", Toast.LENGTH_SHORT).show()
-                apiKeyLayout.error = "Invalid API key"
+                withContext(Dispatchers.Main) {
+                    val errorMessage = when {
+                        e.message?.contains("unauthorized", ignoreCase = true) == true -> "Invalid API key"
+                        e.message?.contains("network", ignoreCase = true) == true -> "Network error"
+                        else -> "Error: ${e.message}"
+                    }
+                    Toast.makeText(this@GeminiConfigActivity, errorMessage, Toast.LENGTH_SHORT).show()
+                    apiKeyLayout.error = errorMessage
+                }
             } finally {
                 testButton.isEnabled = true
                 testButton.text = "Test API Key"
@@ -232,10 +272,14 @@ class GeminiConfigActivity : AppCompatActivity() {
                     geminiDao.setActiveTemplate(templateId)
                 }
 
-                // Initialize service with new config
-                geminiService.initialize()
+                // Initialize service with new config in IO context
+                withContext(Dispatchers.IO) {
+                    geminiService.initialize()
+                }
 
-                Toast.makeText(this@GeminiConfigActivity, "Configuration saved", Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@GeminiConfigActivity, "Configuration saved", Toast.LENGTH_SHORT).show()
+                }
                 finish()
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving config", e)
