@@ -14,9 +14,6 @@ interface ConversationHistoryDao {
     @Insert
     suspend fun insert(history: ConversationHistory)
     
-    @Insert
-    fun insertSync(history: ConversationHistory)
-    
     @Query("SELECT * FROM conversation_history WHERE notificationId = :notificationId ORDER BY timestamp DESC")
     fun getHistoryForNotification(notificationId: Long): LiveData<List<ConversationHistory>>
     
