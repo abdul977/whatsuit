@@ -173,16 +173,22 @@ class GeminiService(private val context: Context) {
                                 timestamp = System.currentTimeMillis()
                             )
                             
-                            // Use non-suspending insert method
-                            database.conversationHistoryDao().insertSync(conversationHistory)
-                            Log.d(TAG, "Saved conversation history")
-
-                            // Use non-suspending prune method
-                            geminiDao.pruneConversationHistorySync(
-                                notificationId = notificationId,
-                                keepCount = config.maxHistoryPerThread
-                            )
-                            Log.d(TAG, "Pruned old history entries")
+                            // Use coroutines for database operations
+                            database.runInTransaction {
+                                // Launch and join a coroutine within the transaction
+                                runBlocking {
+                                    // Insert conversation history
+                                    database.conversationHistoryDao().insert(conversationHistory)
+                                    Log.d(TAG, "Saved conversation history")
+                                    
+                                    // Prune old history entries
+                                    geminiDao.pruneConversationHistory(
+                                        notificationId = notificationId,
+                                        keepCount = config.maxHistoryPerThread
+                                    )
+                                    Log.d(TAG, "Pruned old history entries")
+                                }
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error in conversation history transaction", e)
                             throw e
