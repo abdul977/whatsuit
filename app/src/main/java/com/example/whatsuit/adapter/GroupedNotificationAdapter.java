@@ -2,6 +2,7 @@ package com.example.whatsuit.adapter;
 
 import android.app.Activity;
 import androidx.appcompat.app.AlertDialog;
+import com.example.whatsuit.data.ConversationHistory;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -212,10 +213,10 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             closeButton.setOnClickListener(v -> dialog.dismiss());
         }
         
-        // Use RelatedNotifications LiveData to observe conversation history
+        // Use LiveData to observe related notifications
         AppDatabase db = AppDatabase.getDatabase(context);
         
-        // Observe related notifications as a LiveData
+        // Observe related notifications
         db.notificationDao()
             .getRelatedNotifications(notification.getId())
             .observe((LifecycleOwner) context, relatedNotifications -> {
@@ -228,16 +229,6 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
                     emptyStateText.setVisibility(View.VISIBLE);
                 }
             });
-                    if (history != null && !history.isEmpty()) {
-                        historyAdapter.setHistory(history);
-                        historyRecyclerView.setVisibility(View.VISIBLE);
-                        emptyStateText.setVisibility(View.GONE);
-                    } else {
-                        historyRecyclerView.setVisibility(View.GONE);
-                        emptyStateText.setVisibility(View.VISIBLE);
-                    }
-                }
-            );
         
         dialog.show();
 
