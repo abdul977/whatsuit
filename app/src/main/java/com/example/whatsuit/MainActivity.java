@@ -442,6 +442,35 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    // Helper method to convert NotificationEntity objects to ConversationHistory objects
+    private List<ConversationHistory> convertToHistory(NotificationEntity mainNotification, List<NotificationEntity> related) {
+        List<ConversationHistory> historyList = new ArrayList<>();
+        
+        // Add current notification
+        ConversationHistory current = new ConversationHistory();
+        current.setNotificationId(mainNotification.getId());
+        current.setConversationId(mainNotification.getConversationId());
+        current.setMessage(mainNotification.getContent());
+        current.setResponse(mainNotification.getAutoReplyContent() != null ? 
+                         mainNotification.getAutoReplyContent() : "");
+        current.setTimestamp(mainNotification.getTimestamp());
+        historyList.add(current);
+        
+        // Add related notifications
+        for (NotificationEntity notification : related) {
+            ConversationHistory history = new ConversationHistory();
+            history.setNotificationId(notification.getId());
+            history.setConversationId(notification.getConversationId());
+            history.setMessage(notification.getContent());
+            history.setResponse(notification.getAutoReplyContent() != null ? 
+                             notification.getAutoReplyContent() : "");
+            history.setTimestamp(notification.getTimestamp());
+            historyList.add(history);
+        }
+        
+        return historyList;
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
