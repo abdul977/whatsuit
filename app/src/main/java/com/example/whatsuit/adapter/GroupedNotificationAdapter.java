@@ -1,5 +1,7 @@
 package com.example.whatsuit.adapter;
 
+import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
@@ -8,21 +10,26 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.whatsuit.MainActivity;
 import com.example.whatsuit.NotificationDetailActivity;
 import com.example.whatsuit.R;
+import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.util.AutoReplyManager;
 import com.google.android.material.chip.Chip;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -118,11 +125,127 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     private void updateAutoReplyStatus(NotificationViewHolder holder, NotificationEntity notification) {
-        // Auto-reply status update logic remains the same
+        autoReplyManager.isAutoReplyDisabled(
+            notification.getPackageName(),
+            notification.getConversationId(),
+            "",
+            isDisabled -> {
+                if (holder.autoReplyStatusChip != null) {
+                    holder.autoReplyStatusChip.setText(isDisabled ?
+                        "Auto-reply disabled" : "Auto-reply enabled");
+                    holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
+                }
+            }
+        );
     }
 
     private void showPopupMenu(View view, NotificationEntity notification) {
-        // Popup menu logic remains the same
+        PopupMenu popup = new PopupMenu(view.getContext(), view);
+        MenuInflater inflater = popup.getMenuInflater();
+        inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
+
+        // Update auto-reply menu item state
+        autoReplyManager.isAutoReplyDisabled(
+            notification.getPackageName(),
+            notification.getConversationId(),
+            "",
+            isDisabled -> {
+                MenuItem toggleItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
+                if (toggleItem != null) {
+                    toggleItem.setTitle(isDisabled ? 
+                        "Enable Auto-Reply" : "Disable Auto-Reply");
+                }
+            }
+        );
+
+        popup.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.action_toggle_auto_reply) {
+                // Toggle auto-reply using AutoReplyManager
+                autoReplyManager.toggleAutoReply(
+                    notification.getPackageName(),
+                    notification.getConversationId(),
+                    "",
+                    isDisabled -> notifyItemChanged(items.indexOf(notification))
+                );
+                return true;
+            } else if (itemId == R.id.action_view_details) {
+                // Launch detail activity
+                Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
+                intent.putExtra("notification_id", notification.getId());
+                view.getContext().startActivity(intent);
+                return true;
+            } else if (itemId == R.id.action_view_history) {
+                // Show conversation history dialog
+                showHistoryDialog(view.getContext(), notification);
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
+    }
+
+    private void showHistoryDialog(Context context, NotificationEntity notification) {
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context);
+        
+        View dialogView = LayoutInflater.from(context).inflate(
+            R.layout.dialog_conversation_history,
+            null
+        );
+        
+        RecyclerView historyRecyclerView = dialogView.findViewById(R.id.historyRecyclerView);
+        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
+        View closeButton = dialogView.findViewById(R.id.closeButton);
+        
+        historyRecyclerView.setLayoutManager(new LinearLayoutManager(context));
+        ConversationHistoryAdapter historyAdapter = new ConversationHistoryAdapter();
+        historyRecyclerView.setAdapter(historyAdapter);
+        
+        androidx.appcompat.app.AlertDialog dialog = builder
+            .setView(dialogView)
+            .setCancelable(true)
+            .create();
+
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> dialog.dismiss());
+        }
+        
+        // Load history using the conversationId with kotlin coroutines
+        // We need to handle the suspend function from Java
+        LifecycleOwner lifecycleOwner = (LifecycleOwner) context;
+        
+        // Use Room's LiveData approach instead of direct suspend function call
+        AppDatabase db = AppDatabase.getDatabase(context);
+        
+        // Start a background thread to fetch the data
+        new Thread(() -> {
+            try {
+                // Use a synchronous method instead
+                List<ConversationHistory> history = db.notificationDao()
+                    .getRelatedNotifications(notification.getConversationId(), 50);
+                
+                // Update UI on main thread
+                ((Activity) context).runOnUiThread(() -> {
+                    if (history != null && !history.isEmpty()) {
+                        historyAdapter.setHistory(history);
+                        historyRecyclerView.setVisibility(View.VISIBLE);
+                        emptyStateText.setVisibility(View.GONE);
+                    } else {
+                        historyRecyclerView.setVisibility(View.GONE);
+                        emptyStateText.setVisibility(View.VISIBLE);
+                    }
+                }
+            );
+        
+        dialog.show();
+
+        if (dialog.getWindow() != null) {
+            WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            dialog.getWindow().setAttributes(params);
+        }
     }
 
     public void updateNotifications(List<NotificationEntity> notifications) {
