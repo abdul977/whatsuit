@@ -1,12 +1,11 @@
 package com.example.whatsuit.adapter;
 
-import android.app.Activity;
-import androidx.appcompat.app.AlertDialog;
-import com.example.whatsuit.data.ConversationHistory;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -19,6 +18,7 @@ import android.widget.TextView;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -134,7 +134,7 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             isDisabled -> {
                 if (holder.autoReplyStatusChip != null) {
                     holder.autoReplyStatusChip.setText(isDisabled ?
-                        "Auto-reply disabled" : "Auto-reply enabled");
+                        R.string.auto_reply_disabled : R.string.auto_reply_enabled);
                     holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
                 }
             }
@@ -155,7 +155,7 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
                 MenuItem toggleItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
                 if (toggleItem != null) {
                     toggleItem.setTitle(isDisabled ? 
-                        "Enable Auto-Reply" : "Disable Auto-Reply");
+                        R.string.enable_auto_reply : R.string.disable_auto_reply);
                 }
             }
         );
@@ -200,12 +200,18 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
         View closeButton = dialogView.findViewById(R.id.closeButton);
         
+        // Set empty state text
+        if (emptyStateText != null) {
+            emptyStateText.setText(R.string.no_history);
+        }
+        
         historyRecyclerView.setLayoutManager(new LinearLayoutManager(context));
         ConversationHistoryAdapter historyAdapter = new ConversationHistoryAdapter();
         historyRecyclerView.setAdapter(historyAdapter);
         
         AlertDialog dialog = builder
             .setView(dialogView)
+            .setTitle(R.string.conversation_history)
             .setCancelable(true)
             .create();
 
@@ -213,22 +219,39 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             closeButton.setOnClickListener(v -> dialog.dismiss());
         }
         
-        // Use LiveData to observe related notifications
-        AppDatabase db = AppDatabase.getDatabase(context);
-        
-        // Observe related notifications
-        db.notificationDao()
-            .getRelatedNotifications(notification.getId())
-            .observe((LifecycleOwner) context, relatedNotifications -> {
-                if (relatedNotifications != null && !relatedNotifications.isEmpty()) {
-                    historyAdapter.setHistory(convertToHistory(notification, relatedNotifications));
-                    historyRecyclerView.setVisibility(View.VISIBLE);
-                    emptyStateText.setVisibility(View.GONE);
-                } else {
+        // Load history using the conversationId with a background thread
+        new Thread(() -> {
+            final AppDatabase db = AppDatabase.getDatabase(context);
+            try {
+                // Get conversation history using a synchronous approach
+                final List<ConversationHistory> history = db.notificationDao()
+                    .getNotificationsWithConversationId(notification.getConversationId())
+                    .stream()
+                    .findFirst()
+                    .map(n -> db.conversationHistoryDao().getHistoryForNotificationSync(n.getId()))
+                    .orElse(new ArrayList<>());
+                
+                // Update UI on main thread
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (history != null && !history.isEmpty()) {
+                        historyAdapter.setHistory(history);
+                        historyRecyclerView.setVisibility(View.VISIBLE);
+                        emptyStateText.setVisibility(View.GONE);
+                    } else {
+                        historyRecyclerView.setVisibility(View.GONE);
+                        emptyStateText.setVisibility(View.VISIBLE);
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Show error on main thread
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    emptyStateText.setText(R.string.error_loading_history);
                     historyRecyclerView.setVisibility(View.GONE);
                     emptyStateText.setVisibility(View.VISIBLE);
-                }
-            });
+                });
+            }
+        }).start();
         
         dialog.show();
 
@@ -238,35 +261,6 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             params.height = WindowManager.LayoutParams.WRAP_CONTENT;
             dialog.getWindow().setAttributes(params);
         }
-    }
-    
-    // Helper method to convert NotificationEntity objects to ConversationHistory objects
-    private List<ConversationHistory> convertToHistory(NotificationEntity mainNotification, List<NotificationEntity> related) {
-        List<ConversationHistory> historyList = new ArrayList<>();
-        
-        // Add current notification
-        ConversationHistory current = new ConversationHistory();
-        current.setNotificationId(mainNotification.getId());
-        current.setConversationId(mainNotification.getConversationId());
-        current.setMessage(mainNotification.getContent());
-        current.setResponse(mainNotification.getAutoReplyContent() != null ? 
-                         mainNotification.getAutoReplyContent() : "");
-        current.setTimestamp(mainNotification.getTimestamp());
-        historyList.add(current);
-        
-        // Add related notifications
-        for (NotificationEntity notification : related) {
-            ConversationHistory history = new ConversationHistory();
-            history.setNotificationId(notification.getId());
-            history.setConversationId(notification.getConversationId());
-            history.setMessage(notification.getContent());
-            history.setResponse(notification.getAutoReplyContent() != null ? 
-                             notification.getAutoReplyContent() : "");
-            history.setTimestamp(notification.getTimestamp());
-            historyList.add(history);
-        }
-        
-        return historyList;
     }
 
     public void updateNotifications(List<NotificationEntity> notifications) {
