@@ -28,6 +28,7 @@ import com.example.whatsuit.MainActivity;
 import com.example.whatsuit.NotificationDetailActivity;
 import com.example.whatsuit.R;
 import com.example.whatsuit.data.AppDatabase;
+import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.util.AutoReplyManager;
 import com.google.android.material.chip.Chip;
@@ -223,13 +224,9 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         new Thread(() -> {
             final AppDatabase db = AppDatabase.getDatabase(context);
             try {
-                // Get conversation history using a synchronous approach
-                final List<ConversationHistory> history = db.notificationDao()
-                    .getNotificationsWithConversationId(notification.getConversationId())
-                    .stream()
-                    .findFirst()
-                    .map(n -> db.conversationHistoryDao().getHistoryForNotificationSync(n.getId()))
-                    .orElse(new ArrayList<>());
+                // Get conversation history using a synchronous approach - directly from notification id
+                final List<ConversationHistory> history = db.conversationHistoryDao()
+                    .getHistoryForNotificationSync(notification.getId());
                 
                 // Update UI on main thread
                 new Handler(Looper.getMainLooper()).post(() -> {
