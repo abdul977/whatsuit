@@ -48,6 +48,21 @@ interface GeminiDao {
         notificationId: Long,
         keepCount: Int
     )
+    
+    @Query("""
+        DELETE FROM conversation_history 
+        WHERE notificationId = :notificationId 
+        AND id NOT IN (
+            SELECT id FROM conversation_history 
+            WHERE notificationId = :notificationId 
+            ORDER BY timestamp DESC 
+            LIMIT :keepCount
+        )
+    """)
+    fun pruneConversationHistorySync(
+        notificationId: Long,
+        keepCount: Int
+    )
 
     @Query("DELETE FROM conversation_history WHERE notificationId = :notificationId")
     suspend fun clearConversationHistory(notificationId: Long)
