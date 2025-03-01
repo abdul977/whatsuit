@@ -199,7 +199,6 @@ class GeminiService(private val context: Context) {
         if (history.isEmpty()) return "No previous conversation."
         
         return buildString {
-            append("Previous conversation history:\n\n")
             history.asReversed().forEach { entry ->
                 append("User: ${entry.message}\n")
                 append("Assistant: ${entry.response}\n\n")
