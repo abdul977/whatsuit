@@ -1,14 +1,19 @@
 package com.example.whatsuit;
 
 import android.app.DatePickerDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
@@ -23,9 +28,14 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
+import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.data.ConversationHistoryDao;
 import com.example.whatsuit.util.AutoReplyManager;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
@@ -42,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView emptyView;
     private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
+    private ConversationHistoryDao conversationHistoryDao;
     private AutoReplyManager autoReplyManager;
     private ChipGroup filterChipGroup;
     private String selectedPackage = null;
@@ -56,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        
+
         // Initialize views
         recyclerView = findViewById(R.id.notificationsRecyclerView);
         filterChipGroup = findViewById(R.id.filterChipGroup);
@@ -74,7 +85,9 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setAdapter(notificationAdapter);
 
         // Initialize database
-        notificationDao = AppDatabase.getDatabase(this).notificationDao();
+        AppDatabase db = AppDatabase.getDatabase(this);
+        notificationDao = db.notificationDao();
+        conversationHistoryDao = db.conversationHistoryDao();
 
         // Set up swipe to refresh
         swipeRefresh.setOnRefreshListener(() -> {
@@ -95,7 +108,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Setup app filter
         setupAppFilter();
-        
+
         // Load notifications
         loadNotifications();
 
@@ -107,6 +120,44 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    public void showConversationHistory(NotificationEntity notification) {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_conversation_history, null);
+        TextView historyView = dialogView.findViewById(R.id.historyJson);
+        TextView titleView = dialogView.findViewById(R.id.historyTitle);
+
+        titleView.setText("Conversation History - " + notification.getTitle());
+        historyView.setText("Loading conversation history...");
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
+                .setPositiveButton("Close", null)
+                .setNeutralButton("Copy", (d, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    ClipData clip = ClipData.newPlainText("Conversation History", historyView.getText().toString());
+                    clipboard.setPrimaryClip(clip);
+                    Toast.makeText(this, "History copied to clipboard", Toast.LENGTH_SHORT).show();
+                })
+                .create();
+
+        dialog.show();
+
+        AppDatabase db = AppDatabase.getDatabase(this);
+        db.getConversationHistoryDao().getHistoryForNotification(notification.getId()).observe(this, history -> {
+            if (history != null && !history.isEmpty()) {
+                StringBuilder historyText = new StringBuilder();
+                for (int i = history.size() - 1; i >= 0; i--) {
+                    ConversationHistory entry = history.get(i);
+                    historyText.append("➤ Message: ").append(entry.getMessage()).append("\n\n");
+                    historyText.append("↳ Response: ").append(entry.getResponse()).append("\n\n");
+                    if (i > 0) historyText.append("-------------------\n\n");
+                }
+                historyView.setText(historyText.toString());
+            } else {
+                historyView.setText("No conversation history available");
+            }
+        });
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
@@ -115,8 +166,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_filter) {
+        int itemId = item.getItemId();
+        if (itemId == R.id.action_filter) {
             showTimeFilterDialog();
+            return true;
+        } else if (itemId == R.id.action_gemini_config) {
+            startActivity(new Intent(this, GeminiConfigActivity.class));
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -136,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
         // Show/hide custom range inputs
         timeFilterGroup.setOnCheckedChangeListener((group, checkedId) -> {
             customRangeLayout.setVisibility(
-                checkedId == R.id.customRangeRadio ? View.VISIBLE : View.GONE
+                    checkedId == R.id.customRangeRadio ? View.VISIBLE : View.GONE
             );
         });
 
@@ -183,17 +238,17 @@ public class MainActivity extends AppCompatActivity {
     private void showDatePicker(TextView dateInput, boolean isStartDate) {
         Calendar cal = Calendar.getInstance();
         DatePickerDialog datePickerDialog = new DatePickerDialog(
-            this,
-            (view, year, month, dayOfMonth) -> {
-                Calendar selectedDate = Calendar.getInstance();
-                selectedDate.set(year, month, dayOfMonth, 0, 0, 0);
-                if (isStartDate) startTime = selectedDate.getTimeInMillis();
-                else endTime = selectedDate.getTimeInMillis() + 86400000; // Add 24 hours
-                dateInput.setText(String.format("%d/%d/%d", month + 1, dayOfMonth, year));
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH)
+                this,
+                (view, year, month, dayOfMonth) -> {
+                    Calendar selectedDate = Calendar.getInstance();
+                    selectedDate.set(year, month, dayOfMonth, 0, 0, 0);
+                    if (isStartDate) startTime = selectedDate.getTimeInMillis();
+                    else endTime = selectedDate.getTimeInMillis() + 86400000; // Add 24 hours
+                    dateInput.setText(String.format("%d/%d/%d", month + 1, dayOfMonth, year));
+                },
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH),
+                cal.get(Calendar.DAY_OF_MONTH)
         );
         datePickerDialog.show();
     }
@@ -257,8 +312,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Get new LiveData based on current filters
         currentNotificationsLiveData = selectedPackage == null ?
-            notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
-            notificationDao.getNotificationsForApp(selectedPackage);
+                notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
+                notificationDao.getNotificationsForApp(selectedPackage);
 
         // Observe the new LiveData
         currentNotificationsLiveData.observe(this, notifications -> {
@@ -296,9 +351,49 @@ public class MainActivity extends AppCompatActivity {
                 .setCancelable(false)
                 .show();
     }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        
+        // Check notification permission and restart service if needed
+        if (isNotificationServiceEnabled()) {
+            ensureNotificationServiceRunning();
+        }
+    }
+    
+    private void ensureNotificationServiceRunning() {
+        // Toggle notification listener service to ensure it gets rebound
+        toggleNotificationListenerService();
+        
+        // Start service explicitly
+        Intent serviceIntent = new Intent(this, NotificationService.class);
+        startService(serviceIntent);
+        
+        Log.d("MainActivity", "Ensuring notification service is running");
+    }
+    
+    private void toggleNotificationListenerService() {
+        // This is a workaround to force Android to rebind the notification listener service
+        // Toggling the enabled state forces Android to rebind the service
+        ComponentName componentName = new ComponentName(this, NotificationService.class);
+        
+        // Get package manager
+        PackageManager pm = getPackageManager();
+        
+        // Disable component
+        pm.setComponentEnabledSetting(componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+        
+        // Enable component
+        pm.setComponentEnabledSetting(componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
+        
+        Log.d("MainActivity", "Toggled notification listener service");
+    }
 
     private void showOptionsMenu() {
-        String[] options = {"Clear All", "Auto-Reply Settings", "Settings", "About"};
+        String[] options = {"Clear All", "Auto-Reply Settings", "Gemini Configuration", "Settings", "About"};
         new AlertDialog.Builder(this)
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -309,9 +404,12 @@ public class MainActivity extends AppCompatActivity {
                             startActivity(new Intent(this, AutoReplySettingsActivity.class));
                             break;
                         case 2:
-                            // TODO: Open general settings
+                            startActivity(new Intent(this, GeminiConfigActivity.class));
                             break;
                         case 3:
+                            // TODO: Open general settings
+                            break;
+                        case 4:
                             showAboutDialog();
                             break;
                     }
