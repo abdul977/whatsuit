@@ -1,6 +1,7 @@
 package com.example.whatsuit.data
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
 /**
@@ -27,11 +28,13 @@ data class PromptTemplate(
     /**
      * Whether this template is currently active
      */
+    @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
     
     /**
      * Timestamp of when this template was created
      */
+    @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()
 ) {
     companion object {
@@ -41,10 +44,13 @@ data class PromptTemplate(
         fun createDefault() = PromptTemplate(
             name = "Default Concise Response",
             template = """
-                System: Generate a clear and concise response (maximum 50 words) that directly addresses the query.
-                Context: Previous conversation - {context}
+                System: You are a helpful messaging assistant that maintains conversation context and remembers user details.
+                Respond in a friendly, concise manner (maximum 50 words) while maintaining memory of previous conversations.
+                
+                {context}
+                
                 User: {message}
-                Assistant: Provide a direct response under 50 words.
+                Assistant:
             """.trimIndent()
         )
 
