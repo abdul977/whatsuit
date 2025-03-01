@@ -38,6 +38,7 @@ import com.example.whatsuit.util.AutoReplyManager;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.example.whatsuit.adapter.ConversationHistoryAdapter;
 import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
