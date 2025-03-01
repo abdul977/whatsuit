@@ -168,6 +168,10 @@ public class NotificationService extends NotificationListenerService {
         String title = "";
         String content = "";
         
+        // Initialize threadId and notificationId with default values
+        String threadId = "";
+        long notificationId = System.currentTimeMillis();  // Default to current timestamp
+        
         if (notification.extras != null) {
             CharSequence titleSequence = notification.extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence textSequence = notification.extras.getCharSequence(Notification.EXTRA_TEXT);
@@ -183,12 +187,25 @@ public class NotificationService extends NotificationListenerService {
                 }
             }
         }
+        
+        // Generate consistent thread ID for the conversation
+        threadId = generateThreadId(packageName, title);
+        
+        // Check if there's an existing notification thread
+        NotificationEntity existingNotification = database.notificationDao()
+            .getNotificationByThreadIdSync(threadId);
+        
+        if (existingNotification != null) {
+            notificationId = existingNotification.getId();
+        }
 
         NotificationEntity notificationEntity = new NotificationEntity(
             packageName,
             appName,
             title,
             content,
+            threadId,    // Add thread ID to entity
+            notificationId,  // Use existing or new ID
             sbn.getPostTime(),
             String.valueOf(sbn.getId())
         );
@@ -286,6 +303,19 @@ public class NotificationService extends NotificationListenerService {
         } catch (Exception e) {
             Log.e(TAG, "Error updating notification with deep link", e);
         }
+    }
+
+    private String generateThreadId(String packageName, String title) {
+        // For WhatsApp, use the phone number as thread ID
+        if (packageName.contains("whatsapp") && title != null) {
+            String phoneNumber = title.replaceAll("[^0-9+]", "");
+            if (!phoneNumber.isEmpty()) {
+                return packageName + "_" + phoneNumber;
+            }
+        }
+        
+        // For other apps, use package name + sanitized title
+        return packageName + "_" + (title != null ? title.replaceAll("[^a-zA-Z0-9]", "") : "unknown");
     }
 
     private boolean isMessagingApp(String packageName) {
