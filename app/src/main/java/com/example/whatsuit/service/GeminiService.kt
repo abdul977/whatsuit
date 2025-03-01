@@ -158,25 +158,34 @@ class GeminiService(private val context: Context) {
 
             // Save conversation history if associated notification exists
             try {
-                val notificationExists = database.notificationDao().getNotificationByIdSync(notificationId) != null
-                if (notificationExists) {
-                    val conversationHistory = ConversationHistory(
-                        notificationId = notificationId,
-                        message = message,
-                        response = finalResponse,
-                        timestamp = System.currentTimeMillis()
-                    )
-                    database.conversationHistoryDao().insert(conversationHistory)
-                    Log.d(TAG, "Saved conversation history")
+                withContext(Dispatchers.IO) {
+                    database.runInTransaction {
+                        val notification = database.notificationDao().getNotificationByIdSync(notificationId)
+                        if (notification != null) {
+                            try {
+                                val conversationHistory = ConversationHistory(
+                                    notificationId = notificationId,
+                                    message = message,
+                                    response = finalResponse,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                                database.conversationHistoryDao().insert(conversationHistory)
+                                Log.d(TAG, "Saved conversation history")
 
-                    // Prune old history entries
-                    geminiDao.pruneConversationHistory(
-                        notificationId = notificationId,
-                        keepCount = config.maxHistoryPerThread
-                    )
-                    Log.d(TAG, "Pruned old history entries")
-                } else {
-                    Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
+                                // Prune old history entries
+                                geminiDao.pruneConversationHistory(
+                                    notificationId = notificationId,
+                                    keepCount = config.maxHistoryPerThread
+                                )
+                                Log.d(TAG, "Pruned old history entries")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error in conversation history transaction", e)
+                                throw e
+                            }
+                        } else {
+                            Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving conversation history", e)
@@ -190,7 +199,7 @@ class GeminiService(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error generating reply", e)
             withContext(Dispatchers.Main) {
-                callback.onError(e)
+                callback.onError(RuntimeException("Failed to generate reply: ${e.message}", e))
             }
         }
     }
