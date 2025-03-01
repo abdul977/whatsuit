@@ -124,50 +124,44 @@ public class MainActivity extends AppCompatActivity {
 
     public void showConversationHistory(NotificationEntity notification) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_conversation_history, null);
-        TextView historyView = dialogView.findViewById(R.id.historyJson);
+        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
         TextView titleView = dialogView.findViewById(R.id.historyTitle);
+        RecyclerView historyRecyclerView = dialogView.findViewById(R.id.historyRecyclerView);
 
         titleView.setText("Conversation History - " + notification.getTitle());
-        historyView.setText("Loading conversation history...");
+        emptyStateText.setText("Loading conversation history...");
+        
+        // Set up RecyclerView
+        historyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        ConversationHistoryAdapter historyAdapter = new ConversationHistoryAdapter();
+        historyRecyclerView.setAdapter(historyAdapter);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
                 .setPositiveButton("Close", null)
-                .setNeutralButton("Copy", (d, which) -> {
-                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    ClipData clip = ClipData.newPlainText("Conversation History", historyView.getText().toString());
-                    clipboard.setPrimaryClip(clip);
-                    Toast.makeText(this, "History copied to clipboard", Toast.LENGTH_SHORT).show();
-                })
                 .create();
 
         dialog.show();
 
-        // Use a background thread to get conversation history directly
-        new Thread(() -> {
-            final AppDatabase db = AppDatabase.getDatabase(this);
-            final long notificationId = notification.getId();
-            
-            // Get conversation history directly using Room's synchronous query
-            final List<ConversationHistory> history = db.getConversationHistoryDao()
-                    .getHistoryForNotificationSync(notificationId);
-            
-            // Update UI on main thread
-            runOnUiThread(() -> {
-                if (history != null && !history.isEmpty()) {
-                    StringBuilder historyText = new StringBuilder();
-                    for (int i = history.size() - 1; i >= 0; i--) {
-                        ConversationHistory entry = history.get(i);
-                        historyText.append("➤ Message: ").append(entry.getMessage()).append("\n\n");
-                        historyText.append("↳ Response: ").append(entry.getResponse()).append("\n\n");
-                        if (i > 0) historyText.append("-------------------\n\n");
-                    }
-                    historyView.setText(historyText.toString());
+        // Use LiveData to observe related notifications for this notification
+        AppDatabase db = AppDatabase.getDatabase(this);
+        
+        // Start with related notifications LiveData
+        db.notificationDao()
+            .getRelatedNotifications(notification.getId())
+            .observe(this, relatedNotifications -> {
+                if (relatedNotifications != null && !relatedNotifications.isEmpty()) {
+                    // Convert to ConversationHistory objects for the adapter
+                    List<ConversationHistory> historyList = convertToHistory(notification, relatedNotifications);
+                    historyAdapter.setHistory(historyList);
+                    historyRecyclerView.setVisibility(View.VISIBLE);
+                    emptyStateText.setVisibility(View.GONE);
                 } else {
-                    historyView.setText("No conversation history available");
+                    historyRecyclerView.setVisibility(View.GONE);
+                    emptyStateText.setVisibility(View.VISIBLE);
+                    emptyStateText.setText("No conversation history available");
                 }
             });
-        }).start();
     }
 
     @Override
