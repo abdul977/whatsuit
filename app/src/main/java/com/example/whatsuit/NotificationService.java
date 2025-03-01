@@ -73,7 +73,7 @@ public class NotificationService extends NotificationListenerService {
             android.app.NotificationChannel channel = new android.app.NotificationChannel(
                     "whatsuit_channel",
                     "WhatSuit Notifications",
-                    android.app.NotificationManager.NotificationPriority.DEFAULT);
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT);
             
             channel.setDescription("Notifications from WhatSuit");
             notificationManager.createNotificationChannel(channel);
@@ -331,9 +331,45 @@ public class NotificationService extends NotificationListenerService {
                         CoroutineStart.DEFAULT,
                         (scope, continuation) -> {
                             try {
-                                String replyText = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                                    return geminiService.generateReply(notificationEntity.getContent(), cont);
-                                });
+                                final String[] replyTextHolder = new String[1];
+                                
+                                // Create a ResponseCallback implementation
+                                GeminiService.ResponseCallback callback = new GeminiService.ResponseCallback() {
+                                    @Override
+                                    public void onPartialResponse(String text) {
+                                        // Ignore partial responses for auto-reply
+                                    }
+                                    
+                                    @Override
+                                    public void onComplete(String fullResponse) {
+                                        replyTextHolder[0] = fullResponse;
+                                    }
+                                    
+                                    @Override
+                                    public void onError(Throwable error) {
+                                        Log.e(TAG, "Error generating reply", error);
+                                        replyTextHolder[0] = null;
+                                    }
+                                };
+                                
+                                // Call generateReply with proper parameters
+                                geminiService.generateReply(
+                                    notificationEntity.getId(),
+                                    notificationEntity.getContent(),
+                                    callback
+                                );
+                                
+                                // Wait for the response to be set in the holder
+                                while (replyTextHolder[0] == null) {
+                                    try {
+                                        Thread.sleep(100);
+                                    } catch (InterruptedException e) {
+                                        Log.e(TAG, "Interrupted while waiting for reply", e);
+                                        break;
+                                    }
+                                }
+                                
+                                String replyText = replyTextHolder[0];
                                 
                                 if (replyText != null && !replyText.isEmpty()) {
                                     RemoteInput[] remoteInputs = action.getRemoteInputs();
