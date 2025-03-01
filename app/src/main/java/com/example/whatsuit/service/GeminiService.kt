@@ -150,8 +150,8 @@ class GeminiService(private val context: Context) {
                 withContext(Dispatchers.Main) {
                     fullResponse.append(word).append(" ")
                     callback.onPartialResponse("$word ")
-                    kotlinx.coroutines.delay(50) // Small delay for natural flow
                 }
+                delay(50) // Small delay for natural flow
             }
 
             val finalResponse = fullResponse.toString().trim()
@@ -159,7 +159,7 @@ class GeminiService(private val context: Context) {
             // Save conversation history if associated notification exists
             try {
                 withContext(Dispatchers.IO) {
-                    database.runInTransaction {
+                    database.runInTransaction(Runnable {
                         val notification = database.notificationDao().getNotificationByIdSync(notificationId)
                         if (notification != null) {
                             try {
@@ -185,7 +185,7 @@ class GeminiService(private val context: Context) {
                         } else {
                             Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
                         }
-                    }
+                    })
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving conversation history", e)
