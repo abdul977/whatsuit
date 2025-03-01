@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
         PromptTemplate.class,
         AppSettingEntity.class
     },
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -128,6 +128,14 @@ public abstract class AppDatabase extends RoomDatabase {
         }
     };
 
+    static final Migration MIGRATION_5_6 = new Migration(5, 6) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Load the Migration4To5 Kotlin class which updates the prompt templates
+            new com.example.whatsuit.data.migrations.Migration4To5().migrate(database);
+        }
+    };
+
     public static AppDatabase getDatabase(final Context context) {
         if (INSTANCE == null) {
             synchronized (AppDatabase.class) {
@@ -137,7 +145,7 @@ public abstract class AppDatabase extends RoomDatabase {
                             AppDatabase.class,
                             "notification_database"
                     )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build();
                 }
             }
