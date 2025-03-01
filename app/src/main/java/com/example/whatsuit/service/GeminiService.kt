@@ -7,15 +7,9 @@ import com.example.whatsuit.data.ConversationHistory
 import com.example.whatsuit.data.GeminiConfig
 import com.example.whatsuit.data.PromptTemplate
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.GenerateContentResponse
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class GeminiService(private val context: Context) {
     private companion object {
@@ -29,32 +23,93 @@ class GeminiService(private val context: Context) {
     private var generativeModel: GenerativeModel? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
 
-    /**
-     * Initialize the service with configuration from database
-     */
-    suspend fun initialize() {
-        val config = geminiDao.getConfig()
-        if (config != null) {
-            generativeModel = GenerativeModel(
-                modelName = config.modelName,
-                apiKey = config.apiKey
-            )
-        }
-    }
-
     interface ResponseCallback {
         fun onPartialResponse(text: String)
         fun onComplete(fullResponse: String)
         fun onError(error: Throwable)
     }
 
-    suspend fun generateReply(
+    private val initMutex = kotlinx.coroutines.sync.Mutex()
+    @Volatile
+    private var isInitialized = false
+    private var initializationDeferred: kotlinx.coroutines.Deferred<Boolean>? = null
+
+    // Java-friendly initialization
+    private suspend fun doInitialize(): Boolean {
+        return try {
+            val config = geminiDao.getConfig()
+            if (config != null && !config.apiKey.isNullOrEmpty()) {
+                Log.d(TAG, "Initializing Gemini with model: ${config.modelName}")
+                generativeModel = GenerativeModel(
+                    modelName = config.modelName,
+                    apiKey = config.apiKey
+                )
+                isInitialized = true
+                Log.d(TAG, "Gemini initialization successful")
+                true
+            } else {
+                Log.w(TAG, "Missing Gemini configuration - will skip initialization")
+                isInitialized = false
+                generativeModel = null
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing Gemini", e)
+            isInitialized = false
+            generativeModel = null
+            false
+        }
+    }
+
+    suspend fun initialize() = withContext(Dispatchers.IO) {
+        if (isInitialized) return@withContext true
+
+        initMutex.withLock {
+            if (isInitialized) return@withLock true
+
+            val existingDeferred = initializationDeferred
+            if (existingDeferred?.isActive == true) {
+                try {
+                    return@withLock existingDeferred.await()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Previous initialization failed, will retry", e)
+                }
+            }
+
+            val newDeferred = scope.async {
+                doInitialize()
+            }
+            
+            initializationDeferred = newDeferred
+            
+            try {
+                newDeferred.await()
+            } catch (e: Exception) {
+                Log.e(TAG, "Initialization failed", e)
+                if (initializationDeferred === newDeferred) {
+                    initializationDeferred = null
+                }
+                false
+            }
+        }
+    }
+
+    private suspend fun ensureInitialized() = withContext(Dispatchers.IO) {
+        if (!isInitialized) {
+            initialize()
+        }
+    }
+
+    // Java-friendly reply generation
+    fun generateReply(
         notificationId: Long,
         message: String,
         callback: ResponseCallback
-    ) {
+    ) = scope.launch {
         try {
+            ensureInitialized()
             val config = geminiDao.getConfig() ?: throw IllegalStateException("Gemini not configured")
+            Log.d(TAG, "Retrieved Gemini config: modelName=${config.modelName}, historyLimit=${config.maxHistoryPerThread}")
             val model = generativeModel ?: throw IllegalStateException("Gemini model not initialized")
             
             // Get conversation history
@@ -65,6 +120,7 @@ class GeminiService(private val context: Context) {
             
             // Get active prompt template
             val template = geminiDao.getActiveTemplate() ?: PromptTemplate.createDefault()
+            Log.d(TAG, "Using prompt template: ${template.name}")
             
             // Build context from history
             val context = buildHistoryContext(history)
@@ -77,7 +133,8 @@ class GeminiService(private val context: Context) {
             )
             
             Log.d(TAG, "Generating reply for message: $message")
-            Log.d(TAG, "Using context: $context")
+            Log.d(TAG, "Using history context: $context")
+            Log.d(TAG, "Generated prompt: $prompt")
             
             // Generate response
             val response = withContext(Dispatchers.IO) {
@@ -96,21 +153,33 @@ class GeminiService(private val context: Context) {
                 }
             }
 
-            // Save to conversation history
             val finalResponse = fullResponse.toString().trim()
-            geminiDao.insertConversation(
-                ConversationHistory.create(
-                    notificationId = notificationId,
-                    message = message,
-                    response = finalResponse
-                )
-            )
 
-            // Prune old history if needed
-            geminiDao.pruneConversationHistory(
-                notificationId = notificationId,
-                keepCount = config.maxHistoryPerThread
-            )
+            // Save conversation history if associated notification exists
+            try {
+                val notificationExists = database.notificationDao().getNotificationByIdSync(notificationId) != null
+                if (notificationExists) {
+                    val conversationHistory = ConversationHistory(
+                        notificationId = notificationId,
+                        message = message,
+                        response = finalResponse,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    database.conversationHistoryDao().insert(conversationHistory)
+                    Log.d(TAG, "Saved conversation history")
+
+                    // Prune old history entries
+                    geminiDao.pruneConversationHistory(
+                        notificationId = notificationId,
+                        keepCount = config.maxHistoryPerThread
+                    )
+                    Log.d(TAG, "Pruned old history entries")
+                } else {
+                    Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving conversation history", e)
+            }
 
             withContext(Dispatchers.Main) {
                 callback.onComplete(finalResponse)
@@ -128,9 +197,13 @@ class GeminiService(private val context: Context) {
     private fun buildHistoryContext(history: List<ConversationHistory>): String {
         if (history.isEmpty()) return "No previous conversation."
         
-        return history.joinToString("\n") { entry ->
-            "User: ${entry.message}\nAssistant: ${entry.response}"
-        }
+        return buildString {
+            append("Previous conversation history:\n\n")
+            history.asReversed().forEach { entry ->
+                append("User: ${entry.message}\n")
+                append("Assistant: ${entry.response}\n\n")
+            }
+        }.trimEnd()
     }
 
     private fun limitWords(text: String, maxWords: Int): String {
