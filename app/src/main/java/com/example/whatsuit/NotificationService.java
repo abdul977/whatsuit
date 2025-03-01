@@ -18,6 +18,7 @@ import android.util.Log;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistory;
+import com.example.whatsuit.util.PhoneNumberUtil;
 import com.example.whatsuit.service.GeminiService;
 
 import kotlinx.coroutines.BuildersKt;
@@ -45,7 +46,6 @@ public class NotificationService extends NotificationListenerService {
     private final CoroutineScope serviceScope;
 
     public NotificationService() {
-        // Use GlobalScope with IO dispatcher for background operations
         serviceScope = new CoroutineScope() {
             @Override
             public CoroutineContext getCoroutineContext() {
@@ -61,14 +61,27 @@ public class NotificationService extends NotificationListenerService {
         database = AppDatabase.getDatabase(this);
         initializeGeminiService();
         processedNotifications = getSharedPreferences("processed_notifications", Context.MODE_PRIVATE);
-        
         createNotificationChannel();
-        
-        // Request rebind
-        requestRebind();
-        
+        requestRebind(new ComponentName(this, NotificationService.class));
     }
     
+    private void createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            android.app.NotificationManager notificationManager = 
+                    getSystemService(android.app.NotificationManager.class);
+            
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                    "whatsuit_channel",
+                    "WhatSuit Notifications",
+                    android.app.NotificationManager.NotificationPriority.DEFAULT);
+            
+            channel.setDescription("Notifications from WhatSuit");
+            notificationManager.createNotificationChannel(channel);
+            
+            Log.d(TAG, "Notification channel created");
+        }
+    }
+
     private synchronized void initializeGeminiService() {
         if (geminiInitializing) {
             Log.d(TAG, "Gemini initialization already in progress");
@@ -86,9 +99,7 @@ public class NotificationService extends NotificationListenerService {
                 (scope, continuation) -> {
                     try {
                         Log.d(TAG, "Starting Gemini initialization");
-                        // Use proper Kotlin coroutine pattern for suspend function
                         Boolean result = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                            // Call initialize without passing the continuation
                             return geminiService.initialize(cont);
                         });
                         
@@ -129,13 +140,11 @@ public class NotificationService extends NotificationListenerService {
 
         long currentTime = System.currentTimeMillis();
 
-        // Only check for very recent duplicates (5 seconds)
         if (isRecentNotification(sbn, currentTime)) {
             Log.d(TAG, "Skipping very recent notification: " + sbn.getKey());
             return;
         }
 
-        // Mark this notification time
         markNotificationProcessed(sbn, currentTime);
 
         BuildersKt.launch(
@@ -159,16 +168,12 @@ public class NotificationService extends NotificationListenerService {
         
         Log.d(TAG, "Handling notification from package: " + packageName);
         
-        // Get app name
         PackageManager packageManager = getPackageManager();
         ApplicationInfo applicationInfo = packageManager.getApplicationInfo(packageName, 0);
         String appName = packageManager.getApplicationLabel(applicationInfo).toString();
 
-        // Extract notification details
         String title = "";
         String content = "";
-        
-        // Initialize threadId
         String threadId;
         
         if (notification.extras != null) {
@@ -177,21 +182,23 @@ public class NotificationService extends NotificationListenerService {
             
             if (titleSequence != null) title = titleSequence.toString();
             if (textSequence != null) content = textSequence.toString();
-            
-            if (packageName.contains("whatsapp") && title != null && title.matches(".*[0-9+].*")) {
-                String extracted = title.replaceAll("[^0-9+\\-]", "");
-                String phoneNumber = extracted.replaceAll("[^0-9]", "");
-                if (phoneNumber.length() == 11) {
+
+            // Try to extract phone number from title for WhatsApp
+            if (packageName.contains("whatsapp")) {
+                String phoneNumber = PhoneNumberUtil.extractPhoneNumber(title);
+                // If no phone number in title, try content
+                if (phoneNumber == null && content != null) {
+                    phoneNumber = PhoneNumberUtil.extractPhoneNumber(content);
+                }
+                if (phoneNumber != null) {
                     title = phoneNumber;
                 }
             }
         }
-        
-        // Generate consistent thread ID for the conversation
+
         threadId = generateThreadId(packageName, title);
 
-        
-long id;
+        long id;
         NotificationEntity notificationEntity;
         try {
             notificationEntity = new NotificationEntity(
@@ -202,16 +209,15 @@ long id;
                 threadId,
                 sbn.getPostTime(),
                 String.valueOf(sbn.getId())
-             );
+            );
             
-            // Use atomic upsert operation
             id = database.notificationDao().upsertNotification(notificationEntity);
             Log.d(TAG, "Successfully processed notification with ID: " + id);
         } catch (Exception e) {
             Log.e(TAG, "Error handling notification (Ask Gemini)", e);
             return;
         }
-        // Check auto-reply settings
+
         SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
         boolean globalAutoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false);
         Log.d(TAG, "Global auto-reply enabled: " + globalAutoReplyEnabled);
@@ -222,7 +228,6 @@ long id;
             Log.d(TAG, "App-specific auto-reply enabled for " + packageName + ": " + appSpecificEnabled);
         }
         
-        // Check basic auto-reply conditions without requiring Gemini to be initialized
         boolean shouldAutoReply = isMessagingApp(packageName) && 
             globalAutoReplyEnabled && 
             appSpecificEnabled;
@@ -234,17 +239,14 @@ long id;
             ", geminiStatus=" + (geminiInitialized ? "initialized" : "not initialized") + ")");
 
         if (shouldAutoReply) {
-            String phoneNumber = "";
+            String phoneNumber = PhoneNumberUtil.extractPhoneNumber(title);
             String titlePrefix = "";
             
-            if (packageName.contains("whatsapp") && content != null && content.matches(".*[0-9+].*")) {
-                String extracted = content.replaceAll("[^0-9+\\-]", "");
-                phoneNumber = extracted.replaceAll("[^0-9]", "");
-            } else if (title != null && !title.isEmpty()) {
+            if (phoneNumber == null) {
                 titlePrefix = title.substring(0, Math.min(5, title.length()));
             }
             
-            boolean autoReplyEnabled = !database.notificationDao().isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
+            boolean autoReplyEnabled = !database.notificationDao().isAutoReplyDisabled(packageName, phoneNumber != null ? phoneNumber : "", titlePrefix);
             
             Log.d(TAG, String.format(
                 "Auto-reply conditions met for notification:\n" +
@@ -263,212 +265,182 @@ long id;
         updateNotificationWithDeepLink(sbn, id);
     }
 
-    private void updateNotificationWithDeepLink(StatusBarNotification sbn, long id) {
-        try {
-            Intent deepLinkIntent = new Intent(Intent.ACTION_VIEW, 
-                Uri.parse("whatsuit://notification/" + id));
-            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
-                deepLinkIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            Notification notification = sbn.getNotification();
-            if (notification.extras != null) {
-                Notification.Builder builder;
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    String channelId = notification.getChannelId();
-                    builder = new Notification.Builder(this, channelId);
-                } else {
-                    builder = new Notification.Builder(this);
-                }
-
-                CharSequence title = notification.extras.getCharSequence(Notification.EXTRA_TITLE);
-                CharSequence content = notification.extras.getCharSequence(Notification.EXTRA_TEXT);
-
-                builder.setContentTitle(title)
-                       .setContentText(content)
-                       .setSmallIcon(notification.getSmallIcon())
-                       .setAutoCancel(true)
-                       .setWhen(sbn.getPostTime())
-                       .setContentIntent(pendingIntent);
-
-                notification = builder.build();
-                android.app.NotificationManager notificationManager = 
-                    (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                notificationManager.notify(sbn.getId(), notification);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error updating notification with deep link", e);
-        }
-    }
-
     private String generateThreadId(String packageName, String title) {
-        // For WhatsApp, use the phone number as thread ID
         if (packageName.contains("whatsapp") && title != null) {
-            String phoneNumber = title.replaceAll("[^0-9+]", "");
-            if (!phoneNumber.isEmpty()) {
+            String phoneNumber = PhoneNumberUtil.extractPhoneNumber(title);
+            if (phoneNumber != null) {
                 return packageName + "_" + phoneNumber;
             }
         }
         
-        // For other apps, use package name + sanitized title
         return packageName + "_" + (title != null ? title.replaceAll("[^a-zA-Z0-9]", "") : "unknown");
     }
-
+    
     private boolean isMessagingApp(String packageName) {
-        return packageName.contains("whatsapp") || 
-               packageName.contains("messenger") || 
-               packageName.contains("telegram") ||
-               packageName.contains("signal") ||
-               packageName.contains("com.android.mms") ||
-               packageName.contains("com.google.android.apps.messaging");
+        String[] messagingApps = {
+            "com.whatsapp", 
+            "org.telegram.messenger", 
+            "com.facebook.orca", 
+            "com.instagram.android", 
+            "com.facebook.mlite", 
+            "com.google.android.apps.messaging",
+            "com.viber.voip",
+            "kik.android",
+            "jp.naver.line.android",
+            "com.snapchat.android",
+            "com.discord"
+        };
+        
+        for (String app : messagingApps) {
+            if (packageName.contains(app)) {
+                return true;
+            }
+        }
+        
+        SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
+        Set<String> customMessagingApps = prefs.getStringSet("custom_messaging_apps", new HashSet<>());
+        
+        return customMessagingApps.contains(packageName);
     }
-
+    
     private void handleAutoReply(StatusBarNotification sbn, NotificationEntity notificationEntity) {
-        Notification.Action[] actions = sbn.getNotification().actions;
-        if (actions != null) {
-            for (Notification.Action action : actions) {
-                Log.d(TAG, "Checking notification action: " + action.title);
-                boolean hasRemoteInput = action.getRemoteInputs() != null && action.getRemoteInputs().length > 0;
-                Log.d(TAG, "Action has remote inputs: " + hasRemoteInput);
-                if (hasRemoteInput) {
+        if (!geminiInitialized) {
+            Log.d(TAG, "Cannot handle auto-reply as Gemini is not initialized");
+            return;
+        }
+        
+        Notification notification = sbn.getNotification();
+        if (notification.actions == null) {
+            Log.d(TAG, "No actions available for auto-reply");
+            return;
+        }
+        
+        boolean replyActionFound = false;
+        for (Notification.Action action : notification.actions) {
+            if (action != null && action.getRemoteInputs() != null && 
+                action.getRemoteInputs().length > 0 &&
+                (action.title.toString().toLowerCase().contains("reply") || 
+                 action.title.toString().toLowerCase().contains("respond"))) {
+                
+                try {
+                    replyActionFound = true;
+                    
                     BuildersKt.launch(
                         serviceScope,
                         EmptyCoroutineContext.INSTANCE,
                         CoroutineStart.DEFAULT,
                         (scope, continuation) -> {
                             try {
-                                // Initialize if needed
-                                Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                                    return geminiService.initialize(cont);
+                                String replyText = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
+                                    return geminiService.generateReply(notificationEntity.getContent(), cont);
                                 });
-                                Log.d(TAG, "Gemini initialized for auto-reply");
-                                // Generate and send reply
-                                generateAndSendReply(notificationEntity, action);
+                                
+                                if (replyText != null && !replyText.isEmpty()) {
+                                    RemoteInput[] remoteInputs = action.getRemoteInputs();
+                                    RemoteInput remoteInput = remoteInputs[0];
+                                    
+                                    Intent intent = new Intent();
+                                    Bundle bundle = new Bundle();
+                                    bundle.putCharSequence(remoteInput.getResultKey(), replyText);
+                                    
+                                    RemoteInput.addResultsToIntent(remoteInputs, intent, bundle);
+                                    try {
+                                        action.actionIntent.send(this, 0, intent);
+                                        
+                                        // Update notification with auto-reply info
+                                        notificationEntity.setAutoReplied(true);
+                                        notificationEntity.setAutoReplyContent(replyText);
+                                        database.notificationDao().update(notificationEntity);
+                                        
+                                        Log.d(TAG, "Auto-reply sent: " + replyText);
+                                    } catch (PendingIntent.CanceledException e) {
+                                        Log.e(TAG, "Failed to send auto-reply", e);
+                                    }
+                                } else {
+                                    Log.d(TAG, "Gemini did not generate a reply");
+                                }
                             } catch (Exception e) {
-                                Log.e(TAG, "Error during auto-reply", e);
+                                Log.e(TAG, "Error generating or sending auto-reply", e);
                             }
                             return Unit.INSTANCE;
                         }
                     );
+                    
                     break;
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to execute auto-reply", e);
                 }
             }
         }
+        
+        if (!replyActionFound) {
+            Log.d(TAG, "No suitable reply action found in the notification");
+        }
     }
-
-    private void generateAndSendReply(NotificationEntity notification, Notification.Action replyAction) {
-        geminiService.generateReply(notification.getId(), notification.getContent(), new GeminiService.ResponseCallback() {
-            @Override
-            public void onPartialResponse(String text) {
-                Log.d(TAG, "Partial response from Gemini: " + text);
-            }
-
-            @Override
-            public void onComplete(String fullResponse) {
-                BuildersKt.launch(
-                    serviceScope,
-                    EmptyCoroutineContext.INSTANCE,
-                    CoroutineStart.DEFAULT,
-                    (scope, continuation) -> {
-                        try {
-                            // Update notification status atomically
-                            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (scope2, cont2) -> {
-                                database.runInTransaction(() -> {
-                                    notification.setAutoReplied(true);
-                                    notification.setAutoReplyContent(fullResponse);
-                                    database.notificationDao().update(notification);
-                                    return Unit.INSTANCE;
-                                });
-                                return Unit.INSTANCE;
-                            });
-                            
-                            sendReply(replyAction, fullResponse);
-                            Log.d(TAG, "Generated and sent full response: " + fullResponse);
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error processing auto-reply", e);
-                        }
-                        return Unit.INSTANCE;
-                    }
-                );
-            }
-
-            @Override
-            public void onError(Throwable error) {
-                Log.e(TAG, "Error generating reply from Gemini", error);
-            }
-        });
-    }
-
-    private void sendReply(Notification.Action action, String replyText) {
-        RemoteInput[] remoteInputs = action.getRemoteInputs();
-        if (remoteInputs == null || remoteInputs.length == 0) return;
-
+    
+    private void updateNotificationWithDeepLink(StatusBarNotification sbn, long id) {
         try {
-            RemoteInput remoteInput = remoteInputs[0];
-            Intent intent = new Intent();
-            Bundle results = new Bundle();
-            results.putCharSequence(remoteInput.getResultKey(), replyText);
-            RemoteInput.addResultsToIntent(remoteInputs, intent, results);
-
-            action.actionIntent.send(this, 0, intent);
-            Log.d(TAG, "Successfully sent auto-reply: " + replyText);
-        } catch (PendingIntent.CanceledException e) {
-            Log.e(TAG, "Failed to send auto-reply", e);
-        }
-    }
-
-    private void createNotificationChannel() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            String channelId = "whatsuit_notification_channel";
-            CharSequence channelName = "WhatSuit Notifications";
-            String channelDescription = "Channel for WhatSuit notifications";
-            int importance = android.app.NotificationManager.IMPORTANCE_DEFAULT;
+            // Create an intent to open the NotificationDetailActivity
+            Intent detailIntent = new Intent(this, NotificationDetailActivity.class);
+            detailIntent.putExtra("notification_id", id);
+            detailIntent.putExtra("package_name", sbn.getPackageName());
             
-            android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                channelId, channelName, importance);
-            channel.setDescription(channelDescription);
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 
+                (int) id, 
+                detailIntent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
             
-            android.app.NotificationManager notificationManager = getSystemService(
-                android.app.NotificationManager.class);
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(channel);
-                Log.d(TAG, "Notification channel created");
+            // Get the original notification
+            Notification original = sbn.getNotification();
+            
+            // Build a new notification with the same content but adding our deep link
+            Notification.Builder builder;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                builder = new Notification.Builder(this, original.getChannelId());
+            } else {
+                builder = new Notification.Builder(this);
             }
+            
+            // Copy basic properties
+            builder.setContentTitle(original.extras.getCharSequence(Notification.EXTRA_TITLE))
+                   .setContentText(original.extras.getCharSequence(Notification.EXTRA_TEXT))
+                   .setSmallIcon(original.icon)
+                   .setContentIntent(pendingIntent);
+            
+            // Only attempt to update if we have permission
+            if (isNotificationListenerConnected()) {
+                android.service.notification.StatusBarNotification[] sbnArray = getActiveNotifications();
+                for (android.service.notification.StatusBarNotification activeNotification : sbnArray) {
+                    if (activeNotification.getId() == sbn.getId() && 
+                        activeNotification.getPackageName().equals(sbn.getPackageName())) {
+                        // Update the notification
+                        // Note: This is commented out as it may not be desired to actually replace
+                        // the original notifications, but just to store them for our app to display
+                        // cancelNotification(sbn.getKey());
+                        // NotificationManager notificationManager = getSystemService(NotificationManager.class);
+                        // notificationManager.notify(sbn.getId(), builder.build());
+                        
+                        Log.d(TAG, "Updated notification with deep link: " + id);
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update notification with deep link", e);
         }
     }
-
-    @Override
-    public void onListenerConnected() {
-        super.onListenerConnected();
-        Log.d(TAG, "Notification listener connected");
-    }
-
-    @Override
-    public void onListenerDisconnected() {
-        super.onListenerDisconnected();
-        Log.d(TAG, "Notification listener disconnected - requesting rebind");
-        requestRebind();
-    }
-
-    private void requestRebind() {
-        ComponentName componentName = new ComponentName(this, NotificationService.class);
-        NotificationListenerService.requestRebind(componentName);
-        Log.d(TAG, "Requested rebind for notification service");
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        Log.d(TAG, "NotificationService being destroyed");
-        if (geminiService != null) {
-            geminiService.shutdown();
-        }
-        if (serviceScope != null) {
-            Job job = serviceScope.getCoroutineContext().get(Job.Key);
-            if (job != null) {
-                job.cancel(null);
-            }
-            Log.d(TAG, "Service scope cancelled");
+    
+    private boolean isNotificationListenerConnected() {
+        try {
+            return android.provider.Settings.Secure.getString(
+                getContentResolver(),
+                "enabled_notification_listeners"
+            ).contains(getPackageName());
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking notification listener status", e);
+            return false;
         }
     }
 }
