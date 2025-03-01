@@ -146,12 +146,15 @@ class GeminiService(private val context: Context) {
             val generatedText = limitWords(response.text ?: "", MAX_WORDS)
 
             // Simulate streaming for better UX
-            generatedText.split(" ").forEach { word ->
+            val words = generatedText.split(" ")
+            for (word in words) {
                 withContext(Dispatchers.Main) {
                     fullResponse.append(word).append(" ")
                     callback.onPartialResponse("$word ")
                 }
-                delay(50) // Small delay for natural flow
+                // Use a non-suspending alternative to delay
+                // since we're in a non-suspending context inside forEach
+                Thread.sleep(50) // Small delay for natural flow
             }
 
             val finalResponse = fullResponse.toString().trim()
