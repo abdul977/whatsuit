@@ -73,6 +73,7 @@ class GeminiService(private val context: Context) {
                     return@withLock existingDeferred.await()
                 } catch (e: Exception) {
                     Log.w(TAG, "Previous initialization failed, will retry", e)
+                    // Continue to create a new deferred
                 }
             }
 
@@ -83,13 +84,13 @@ class GeminiService(private val context: Context) {
             initializationDeferred = newDeferred
             
             try {
-                newDeferred.await()
+                return@withLock newDeferred.await()
             } catch (e: Exception) {
                 Log.e(TAG, "Initialization failed", e)
                 if (initializationDeferred === newDeferred) {
                     initializationDeferred = null
                 }
-                false
+                return@withLock false
             }
         }
     }
