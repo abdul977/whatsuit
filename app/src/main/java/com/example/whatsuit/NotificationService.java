@@ -189,37 +189,28 @@ public class NotificationService extends NotificationListenerService {
         
         // Generate consistent thread ID for the conversation
         threadId = generateThreadId(packageName, title);
-        
-        NotificationEntity notificationEntity = new NotificationEntity(
-            packageName,
-            appName,
-            title,
-            content,
-            threadId,
-            0, // Default ID which will be replaced after insertion
-            sbn.getPostTime(),
-            String.valueOf(sbn.getId())
-        );
-        
-        // Check if there's an existing notification thread
-        NotificationEntity existingNotification = database.notificationDao()
-            .getNotificationByThreadIdSync(threadId);
 
         
 long id;
-        if (existingNotification != null) {
-            // Update existing notification
-            notificationEntity.setId(existingNotification.getId());
-           database.notificationDao().update(notificationEntity);
-            id = existingNotification.getId();
-            Log.d(TAG, "Updated existing notification with ID: " + id);
-        } else {
-            // Insert new notification
-            id = database.notificationDao().insert(notificationEntity);
-            notificationEntity.setId(id);
-            Log.d(TAG, "Inserted new notification with ID: " + id);
+        NotificationEntity notificationEntity;
+        try {
+            notificationEntity = new NotificationEntity(
+                packageName,
+                appName,
+                title,
+                content,
+                threadId,
+                sbn.getPostTime(),
+                String.valueOf(sbn.getId())
+             );
+            
+            // Use atomic upsert operation
+            id = database.notificationDao().upsertNotification(notificationEntity);
+            Log.d(TAG, "Successfully processed notification with ID: " + id);
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling notification (Ask Gemini)", e);
+            return;
         }
-
         // Check auto-reply settings
         SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
         boolean globalAutoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false);
@@ -380,12 +371,16 @@ long id;
                     CoroutineStart.DEFAULT,
                     (scope, continuation) -> {
                         try {
-                            saveConversationHistory(notification, fullResponse);
-                            Log.d(TAG, "Initiated saving conversation history for notification " + notification.getId());
-                            
-                            notification.setAutoReplied(true);
-                            notification.setAutoReplyContent(fullResponse);
-                            database.notificationDao().update(notification);
+                            // Update notification status atomically
+                            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (scope2, cont2) -> {
+                                database.runInTransaction(() -> {
+                                    notification.setAutoReplied(true);
+                                    notification.setAutoReplyContent(fullResponse);
+                                    database.notificationDao().update(notification);
+                                    return Unit.INSTANCE;
+                                });
+                                return Unit.INSTANCE;
+                            });
                             
                             sendReply(replyAction, fullResponse);
                             Log.d(TAG, "Generated and sent full response: " + fullResponse);
@@ -420,28 +415,6 @@ long id;
         } catch (PendingIntent.CanceledException e) {
             Log.e(TAG, "Failed to send auto-reply", e);
         }
-    }
-
-    private void saveConversationHistory(NotificationEntity notification, String fullResponse) {
-        BuildersKt.launch(
-            serviceScope,
-            EmptyCoroutineContext.INSTANCE,
-            CoroutineStart.DEFAULT,
-            (scope, continuation) -> {
-                try {
-                    ConversationHistory history = ConversationHistory.Companion.create(
-                        notification.getId(),
-                        notification.getContent(),
-                        fullResponse
-                    );
-                    database.conversationHistoryDao().insert(history, continuation);
-                    Log.d(TAG, "Successfully saved conversation history for notification " + notification.getId());
-                } catch (Exception e) {
-                    Log.e(TAG, "Error saving conversation history", e);
-                }
-                return Unit.INSTANCE;
-            }
-        );
     }
 
     private void createNotificationChannel() {
