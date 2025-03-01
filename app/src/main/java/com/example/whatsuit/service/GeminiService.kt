@@ -162,33 +162,34 @@ class GeminiService(private val context: Context) {
             // Save conversation history if associated notification exists
             try {
                 withContext(Dispatchers.IO) {
-                    database.runInTransaction(Runnable {
-                        val notification = database.notificationDao().getNotificationByIdSync(notificationId)
-                        if (notification != null) {
-                            try {
-                                val conversationHistory = ConversationHistory(
-                                    notificationId = notificationId,
-                                    message = message,
-                                    response = finalResponse,
-                                    timestamp = System.currentTimeMillis()
-                                )
-                                database.conversationHistoryDao().insert(conversationHistory)
-                                Log.d(TAG, "Saved conversation history")
+                    // Check if notification exists before starting transaction
+                    val notification = database.notificationDao().getNotificationByIdSync(notificationId)
+                    if (notification != null) {
+                        try {
+                            val conversationHistory = ConversationHistory(
+                                notificationId = notificationId,
+                                message = message,
+                                response = finalResponse,
+                                timestamp = System.currentTimeMillis()
+                            )
+                            
+                            // Use non-suspending insert method
+                            database.conversationHistoryDao().insertSync(conversationHistory)
+                            Log.d(TAG, "Saved conversation history")
 
-                                // Prune old history entries
-                                geminiDao.pruneConversationHistory(
-                                    notificationId = notificationId,
-                                    keepCount = config.maxHistoryPerThread
-                                )
-                                Log.d(TAG, "Pruned old history entries")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error in conversation history transaction", e)
-                                throw e
-                            }
-                        } else {
-                            Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
+                            // Use non-suspending prune method
+                            geminiDao.pruneConversationHistorySync(
+                                notificationId = notificationId,
+                                keepCount = config.maxHistoryPerThread
+                            )
+                            Log.d(TAG, "Pruned old history entries")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error in conversation history transaction", e)
+                            throw e
                         }
-                    })
+                    } else {
+                        Log.w(TAG, "Skipping conversation history save - notification $notificationId does not exist")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving conversation history", e)
