@@ -139,7 +139,6 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
                 .setPositiveButton("Close", null)
-                .setNeutralButton("Close", null)
                 .create();
 
         dialog.show();
