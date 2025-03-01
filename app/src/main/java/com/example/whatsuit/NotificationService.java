@@ -2,6 +2,7 @@ package com.example.whatsuit;
 
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.app.RemoteInput;
@@ -35,7 +36,9 @@ import java.util.Set;
 
 public class NotificationService extends NotificationListenerService {
     private static final String TAG = "AutoReplySystem";
-    private GeminiService geminiService;
+    private volatile GeminiService geminiService;
+    private volatile boolean geminiInitialized = false;
+    private volatile boolean geminiInitializing = false;
     private AppDatabase database;
     private static final long NOTIFICATION_COOLDOWN = 5000; // 5 seconds cooldown
     private SharedPreferences processedNotifications;
@@ -56,27 +59,55 @@ public class NotificationService extends NotificationListenerService {
         super.onCreate();
         Log.d(TAG, "NotificationService created");
         database = AppDatabase.getDatabase(this);
-        geminiService = new GeminiService(this);
+        initializeGeminiService();
         processedNotifications = getSharedPreferences("processed_notifications", Context.MODE_PRIVATE);
         
-        // Initialize Gemini service with configuration
-        BuildersKt.launch(
-            serviceScope,
-            EmptyCoroutineContext.INSTANCE,
-            CoroutineStart.DEFAULT,
-            (scope, continuation) -> {
-                try {
-                    BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                        geminiService.initialize(cont);
-                        return Unit.INSTANCE;
-                    });
-                    Log.d(TAG, "Gemini initialization completed");
-                } catch (Exception e) {
-                    Log.e(TAG, "Error initializing Gemini", e);
+        createNotificationChannel();
+        
+        // Request rebind
+        requestRebind();
+        
+    }
+    
+    private synchronized void initializeGeminiService() {
+        if (geminiInitializing) {
+            Log.d(TAG, "Gemini initialization already in progress");
+            return;
+        }
+
+        geminiInitializing = true;
+        geminiService = new GeminiService(this);
+        
+        try {
+            BuildersKt.launch(
+                serviceScope,
+                EmptyCoroutineContext.INSTANCE,
+                CoroutineStart.DEFAULT,
+                (scope, continuation) -> {
+                    try {
+                        Log.d(TAG, "Starting Gemini initialization");
+                        // Use proper Kotlin coroutine pattern for suspend function
+                        Boolean result = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
+                            // Call initialize without passing the continuation
+                            return geminiService.initialize(cont);
+                        });
+                        
+                        geminiInitialized = result != null && result;
+                        Log.d(TAG, "Gemini initialization completed successfully: " + geminiInitialized);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Gemini initialization failed (will continue without auto-reply): " + e.getMessage());
+                        geminiInitialized = false;
+                    } finally {
+                        geminiInitializing = false;
+                    }
+                    return Unit.INSTANCE;
                 }
-                return Unit.INSTANCE;
-            }
-        );
+            );
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to launch Gemini initialization", e);
+            geminiInitializing = false;
+            geminiInitialized = false;
+        }
     }
 
     private boolean isRecentNotification(StatusBarNotification sbn, long currentTime) {
@@ -126,6 +157,8 @@ public class NotificationService extends NotificationListenerService {
         Notification notification = sbn.getNotification();
         String packageName = sbn.getPackageName();
         
+        Log.d(TAG, "Handling notification from package: " + packageName);
+        
         // Get app name
         PackageManager packageManager = getPackageManager();
         ApplicationInfo applicationInfo = packageManager.getApplicationInfo(packageName, 0);
@@ -173,7 +206,8 @@ public class NotificationService extends NotificationListenerService {
         
         boolean shouldAutoReply = isMessagingApp(packageName) && 
             globalAutoReplyEnabled && 
-            appSpecificEnabled;
+            appSpecificEnabled &&
+            geminiInitialized;
             
         Log.d(TAG, "Should auto-reply: " + shouldAutoReply + 
             " (isMessagingApp=" + isMessagingApp(packageName) + 
@@ -183,6 +217,7 @@ public class NotificationService extends NotificationListenerService {
         // Save notification first
         long id = database.notificationDao().insert(notificationEntity);
         notificationEntity.setId(id);
+        Log.d(TAG, "Saved notification to database with ID: " + id + ", Title: " + title + ", Content: " + content);
 
         if (shouldAutoReply) {
             String phoneNumber = "";
@@ -276,9 +311,8 @@ public class NotificationService extends NotificationListenerService {
                         (scope, continuation) -> {
                             try {
                                 // Initialize if needed
-                                BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                                    geminiService.initialize(cont);
-                                    return Unit.INSTANCE;
+                                Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
+                                    return geminiService.initialize(cont);
                                 });
                                 Log.d(TAG, "Gemini initialized for auto-reply");
                                 // Generate and send reply
@@ -374,9 +408,49 @@ public class NotificationService extends NotificationListenerService {
         );
     }
 
+    private void createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            String channelId = "whatsuit_notification_channel";
+            CharSequence channelName = "WhatSuit Notifications";
+            String channelDescription = "Channel for WhatSuit notifications";
+            int importance = android.app.NotificationManager.IMPORTANCE_DEFAULT;
+            
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                channelId, channelName, importance);
+            channel.setDescription(channelDescription);
+            
+            android.app.NotificationManager notificationManager = getSystemService(
+                android.app.NotificationManager.class);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(channel);
+                Log.d(TAG, "Notification channel created");
+            }
+        }
+    }
+
+    @Override
+    public void onListenerConnected() {
+        super.onListenerConnected();
+        Log.d(TAG, "Notification listener connected");
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        super.onListenerDisconnected();
+        Log.d(TAG, "Notification listener disconnected - requesting rebind");
+        requestRebind();
+    }
+
+    private void requestRebind() {
+        ComponentName componentName = new ComponentName(this, NotificationService.class);
+        NotificationListenerService.requestRebind(componentName);
+        Log.d(TAG, "Requested rebind for notification service");
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
+        Log.d(TAG, "NotificationService being destroyed");
         if (geminiService != null) {
             geminiService.shutdown();
         }
