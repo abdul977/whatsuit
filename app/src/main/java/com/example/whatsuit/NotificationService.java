@@ -168,9 +168,8 @@ public class NotificationService extends NotificationListenerService {
         String title = "";
         String content = "";
         
-        // Initialize threadId and notificationId with default values
-        String threadId = "";
-        long notificationId = System.currentTimeMillis();  // Default to current timestamp
+        // Initialize threadId
+        String threadId;
         
         if (notification.extras != null) {
             CharSequence titleSequence = notification.extras.getCharSequence(Notification.EXTRA_TITLE);
@@ -191,24 +190,35 @@ public class NotificationService extends NotificationListenerService {
         // Generate consistent thread ID for the conversation
         threadId = generateThreadId(packageName, title);
         
-        // Check if there's an existing notification thread
-        NotificationEntity existingNotification = database.notificationDao()
-            .getNotificationByThreadIdSync(threadId);
-        
-        if (existingNotification != null) {
-            notificationId = existingNotification.getId();
-        }
-
         NotificationEntity notificationEntity = new NotificationEntity(
             packageName,
             appName,
             title,
             content,
-            threadId,    // Add thread ID to entity
-            notificationId,  // Use existing or new ID
+            threadId,
+            0, // Default ID which will be replaced after insertion
             sbn.getPostTime(),
             String.valueOf(sbn.getId())
         );
+        
+        // Check if there's an existing notification thread
+        NotificationEntity existingNotification = database.notificationDao()
+            .getNotificationByThreadIdSync(threadId);
+
+        
+long id;
+        if (existingNotification != null) {
+            // Update existing notification
+            notificationEntity.setId(existingNotification.getId());
+           database.notificationDao().update(notificationEntity);
+            id = existingNotification.getId();
+            Log.d(TAG, "Updated existing notification with ID: " + id);
+        } else {
+            // Insert new notification
+            id = database.notificationDao().insert(notificationEntity);
+            notificationEntity.setId(id);
+            Log.d(TAG, "Inserted new notification with ID: " + id);
+        }
 
         // Check auto-reply settings
         SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
@@ -231,11 +241,6 @@ public class NotificationService extends NotificationListenerService {
             ", globalEnabled=" + globalAutoReplyEnabled + 
             ", appEnabled=" + appSpecificEnabled + 
             ", geminiStatus=" + (geminiInitialized ? "initialized" : "not initialized") + ")");
-
-        // Save notification first
-        long id = database.notificationDao().insert(notificationEntity);
-        notificationEntity.setId(id);
-        Log.d(TAG, "Saved notification to database with ID: " + id + ", Title: " + title + ", Content: " + content);
 
         if (shouldAutoReply) {
             String phoneNumber = "";
