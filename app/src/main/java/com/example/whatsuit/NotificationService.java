@@ -204,15 +204,16 @@ public class NotificationService extends NotificationListenerService {
             Log.d(TAG, "App-specific auto-reply enabled for " + packageName + ": " + appSpecificEnabled);
         }
         
+        // Check basic auto-reply conditions without requiring Gemini to be initialized
         boolean shouldAutoReply = isMessagingApp(packageName) && 
             globalAutoReplyEnabled && 
-            appSpecificEnabled &&
-            geminiInitialized;
+            appSpecificEnabled;
             
         Log.d(TAG, "Should auto-reply: " + shouldAutoReply + 
             " (isMessagingApp=" + isMessagingApp(packageName) + 
             ", globalEnabled=" + globalAutoReplyEnabled + 
-            ", appEnabled=" + appSpecificEnabled + ")");
+            ", appEnabled=" + appSpecificEnabled + 
+            ", geminiStatus=" + (geminiInitialized ? "initialized" : "not initialized") + ")");
 
         // Save notification first
         long id = database.notificationDao().insert(notificationEntity);
