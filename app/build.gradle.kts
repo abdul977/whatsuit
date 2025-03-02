@@ -52,6 +52,12 @@ android {
     }
 }
 
+repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
 dependencies {
     implementation(libs.core.ktx)
     implementation(libs.cronet.embedded)
