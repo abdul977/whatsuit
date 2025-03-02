@@ -52,11 +52,6 @@ android {
     }
 }
 
-repositories {
-    google()
-    mavenCentral()
-    maven { url = uri("https://jitpack.io") }
-}
 
 dependencies {
     implementation(libs.core.ktx)
@@ -97,7 +92,7 @@ dependencies {
     
     // Splash Screen & Animations
     implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("com.github.plattysoft:Leonids:1.5.2")
+    implementation("com.github.plattysoft:Leonids:0.2.1")
     
     // Testing
     testImplementation(libs.junit)
