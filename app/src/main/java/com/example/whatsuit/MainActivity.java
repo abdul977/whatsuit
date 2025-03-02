@@ -88,54 +88,227 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Install splash screen and keep it visible during initialization
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        splashScreen.setKeepOnScreenCondition(() -> !isAppReady);
+        
         super.onCreate(savedInstanceState);
+        
+        // Set up our custom splash overlay first
+        setContentView(R.layout.splash_screen_overlay);
+        
+        // Initialize splash screen views
+        splashOverlay = findViewById(android.R.id.content);
+        splashIcon = findViewById(R.id.splash_icon);
+        splashProgress = findViewById(R.id.splash_progress);
+        splashText = findViewById(R.id.splash_text);
+        
+        // Start initialization process in background
+        initializeApp();
+    }
+    
+    private void initializeApp() {
+        // Simulate app initialization in background thread
+        new Thread(() -> {
+            try {
+                // Initialize database
+                AppDatabase db = AppDatabase.getDatabase(this);
+                notificationDao = db.notificationDao();
+                conversationHistoryDao = db.conversationHistoryDao();
+                
+                // Initialize managers
+                autoReplyManager = new AutoReplyManager(this);
+                
+                // Simulate other initialization tasks with delay to show animation
+                Thread.sleep(1200);
+                
+                // Signal completion and start animations
+                new Handler(Looper.getMainLooper()).post(this::startSplashAnimations);
+            } catch (Exception e) {
+                Log.e("MainActivity", "Error during initialization", e);
+                // Signal completion even if error occurred
+                new Handler(Looper.getMainLooper()).post(this::startSplashAnimations);
+            }
+        }).start();
+    }
+    
+    private void startSplashAnimations() {
+        // Mark app as ready (this removes the system splash screen)
+        isAppReady = true;
+        
+        // Start pulse animation on icon
+        ObjectAnimator scaleX = ObjectAnimator.ofFloat(splashIcon, View.SCALE_X, 1f, 1.2f, 1f);
+        ObjectAnimator scaleY = ObjectAnimator.ofFloat(splashIcon, View.SCALE_Y, 1f, 1.2f, 1f);
+        
+        AnimatorSet pulseSet = new AnimatorSet();
+        pulseSet.playTogether(scaleX, scaleY);
+        pulseSet.setDuration(1000);
+        
+        // After pulse, trigger particle animation
+        pulseSet.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                // Hide progress and text
+                splashProgress.animate().alpha(0f).setDuration(300).start();
+                splashText.animate().alpha(0f).setDuration(300).start();
+                
+                // Create particle animation
+                createParticleEffect();
+            }
+        });
+        
+        // Start the animation sequence
+        pulseSet.start();
+    }
+    
+    private void createParticleEffect() {
+        // Get icon position for particles
+        int[] iconPos = new int[2];
+        splashIcon.getLocationOnScreen(iconPos);
+        int centerX = iconPos[0] + splashIcon.getWidth() / 2;
+        int centerY = iconPos[1] + splashIcon.getHeight() / 2;
+        
+        // Create particle animation
+        particleSystem = new ParticleSystem(MainActivity.this, 100, 
+                R.drawable.notification_particle, 1500);
+        particleSystem
+            .setSpeedModuleAndAngleRange(0.1f, 0.5f, 0, 360)
+            .setScaleRange(0.1f, 0.5f)
+            .setRotationSpeedRange(90, 180)
+            .setAcceleration(0.0001f, 90)
+            .setFadeOut(700)
+            .oneShot(centerX, centerY, 100);
+        
+        // Fade out the splash icon as particles disperse
+        splashIcon.animate()
+            .alpha(0f)
+            .setDuration(700)
+            .setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    // Once particles and fade out complete, switch to main layout
+                    switchToMainContent();
+                }
+            })
+            .start();
+    }
+    
+    private void switchToMainContent() {
+        // Enable edge-to-edge and set main layout
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-
-        // Initialize views
+        
+        // Initialize views from regular layout
         recyclerView = findViewById(R.id.notificationsRecyclerView);
         filterChipGroup = findViewById(R.id.filterChipGroup);
         emptyView = findViewById(R.id.emptyView);
         swipeRefresh = findViewById(R.id.swipeRefresh);
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
-
-        // Initialize managers
-        autoReplyManager = new AutoReplyManager(this);
-
+        
+        // Hide all initially for animation
+        appBarLayout.setAlpha(0f);
+        recyclerView.setAlpha(0f);
+        recyclerView.setTranslationY(100f);
+        if (fab != null) {
+            fab.setScaleX(0f);
+            fab.setScaleY(0f);
+        }
+        
+        // Get the center point for circular reveal
+        View rootView = findViewById(android.R.id.content);
+        
+        // Wait for layout to be ready
+        rootView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                rootView.getViewTreeObserver().removeOnPreDrawListener(this);
+                
+                // Perform circular reveal animation
+                int cx = rootView.getWidth() / 2;
+                int cy = rootView.getHeight() / 2;
+                float finalRadius = (float) Math.hypot(cx, cy);
+                
+                Animator circularReveal = ViewAnimationUtils.createCircularReveal(
+                        rootView, cx, cy, 0f, finalRadius);
+                circularReveal.setDuration(800);
+                circularReveal.setInterpolator(new DecelerateInterpolator());
+                
+                circularReveal.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        // Start staggered animations for UI elements
+                        animateUIElements();
+                    }
+                });
+                
+                circularReveal.start();
+                return true;
+            }
+        });
+    }
+    
+    private void animateUIElements() {
+        // Animate toolbar first
+        appBarLayout.animate()
+            .alpha(1f)
+            .setDuration(300)
+            .start();
+        
+        // Animate recyclerView with delay
+        recyclerView.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(500)
+            .setStartDelay(150)
+            .start();
+        
+        // Animate FAB with additional delay and overshoot
+        if (fab != null) {
+            fab.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setStartDelay(300)
+                .setDuration(500)
+                .setInterpolator(new OvershootInterpolator())
+                .start();
+        }
+        
+        // Continue with regular MainActivity initialization
+        finishMainActivityInitialization();
+    }
+    
+    private void finishMainActivityInitialization() {
         // Set up notifications RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
         recyclerView.setAdapter(notificationAdapter);
-
-        // Initialize database
-        AppDatabase db = AppDatabase.getDatabase(this);
-        notificationDao = db.notificationDao();
-        conversationHistoryDao = db.conversationHistoryDao();
-
+        
         // Set up swipe to refresh
         swipeRefresh.setOnRefreshListener(() -> {
             loadNotifications();
             swipeRefresh.setRefreshing(false);
         });
-
+        
         // Set up collapsing toolbar behavior
         setupCollapsingToolbar();
-
+        
         // FAB click listener
-        fab.setOnClickListener(v -> showOptionsMenu());
-
+        if (fab != null) {
+            fab.setOnClickListener(v -> showOptionsMenu());
+        }
+        
         // Check for notification access permission
         if (!isNotificationServiceEnabled()) {
             showNotificationAccessDialog();
         }
-
+        
         // Setup app filter
         setupAppFilter();
-
+        
         // Load notifications
         loadNotifications();
-
+        
         // Handle window insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
