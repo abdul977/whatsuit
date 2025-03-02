@@ -89,6 +89,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     
+    // Splash Screen & Animations
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.github.plattysoft:Leonids:1.5.2")
+    
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
