@@ -20,15 +20,17 @@ class Migration2To3 : Migration(2, 3) {
             )
         """.trimIndent())
 
-        // Create conversation_history table
+        // Create conversation_history table with columns in specific order to match Room's expectations
         database.execSQL("""
             CREATE TABLE IF NOT EXISTS conversation_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                notification_id INTEGER,
-                message TEXT NOT NULL,
+                isModified INTEGER NOT NULL DEFAULT 0,
+                conversationId TEXT NOT NULL,
                 response TEXT NOT NULL,
-                timestamp INTEGER DEFAULT (strftime('%s', 'now') * 1000),
-                FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE
+                notificationId INTEGER NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                message TEXT NOT NULL,
+                timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+                FOREIGN KEY (notificationId) REFERENCES notifications(id) ON DELETE CASCADE
             )
         """.trimIndent())
 
@@ -57,7 +59,7 @@ class Migration2To3 : Migration(2, 3) {
         
         // Create index for conversation history
         database.execSQL(
-            "CREATE INDEX IF NOT EXISTS idx_conversation_notification_id ON conversation_history(notification_id)"
+            "CREATE INDEX IF NOT EXISTS index_conversation_history_notificationId ON conversation_history(notificationId)"
         )
     }
 }

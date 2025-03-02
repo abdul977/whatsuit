@@ -92,7 +92,8 @@ dependencies {
     
     // Splash Screen & Animations
     implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("com.github.plattysoft:Leonids:0.2.1")
+    implementation("androidx.core:core-animation:1.0.0-alpha02")
+
     
     // Testing
     testImplementation(libs.junit)

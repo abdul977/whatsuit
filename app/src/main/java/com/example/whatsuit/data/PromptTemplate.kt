@@ -42,14 +42,11 @@ data class PromptTemplate(
          * Creates the default concise response template
          */
         fun createDefault() = PromptTemplate(
-            name = "Default Concise Response with Strong Memory",
+            name = "Default Concise Response",
             template = """
-                System: You are a helpful messaging assistant with excellent memory capabilities. 
-                IMPORTANT: You must always remember user details like their name, preferences, and previous topics discussed.
-                When a user shares personal information (especially their name), store and recall it consistently in future interactions.
-                Respond in a friendly, concise manner (maximum 50 words).
+                System: You are a helpful messaging assistant that maintains conversation context and remembers user details.
+                Respond in a friendly, concise manner (maximum 50 words) while maintaining memory of previous conversations.
                 
-                Previous conversation history:
                 {context}
                 
                 User: {message}

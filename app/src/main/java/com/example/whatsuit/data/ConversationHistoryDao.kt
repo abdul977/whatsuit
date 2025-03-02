@@ -4,7 +4,9 @@ import androidx.lifecycle.LiveData
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Transaction
+import androidx.annotation.NonNull
 
 /**
  * Data Access Object for handling conversation history database operations
@@ -14,6 +16,45 @@ interface ConversationHistoryDao {
     @Insert
     suspend fun insert(history: ConversationHistory)
     
+    @Update
+    suspend fun update(history: ConversationHistory)
+    
+    @Query("SELECT * FROM conversation_history WHERE id = :id")
+    suspend fun getConversationById(id: Long): ConversationHistory?
+    
+    @Transaction
+    @Query("""
+        UPDATE conversation_history 
+        SET message = :newMessage,
+            response = :newResponse,
+            timestamp = :timestamp,
+            isModified = 1
+        WHERE id = :conversationId
+        """)
+    suspend fun updateConversationContent(
+        conversationId: Long,
+        newMessage: String,
+        newResponse: String,
+        timestamp: Long = System.currentTimeMillis()
+    )
+    
+    /**
+     * Non-suspending version for Java interop
+     */
+    @Transaction
+    @Query("""
+        UPDATE conversation_history 
+        SET message = :newMessage,
+            response = :newResponse,
+            timestamp = :timestamp,
+            isModified = 1
+        WHERE id = :conversationId
+        """)
+    fun updateConversationContentSync(conversationId: Long, newMessage: String, newResponse: String, timestamp: Long)
+    
+    /**
+     * Gets conversation history for a notification, sorted by timestamp descending
+     */
     @Query("SELECT * FROM conversation_history WHERE notificationId = :notificationId ORDER BY timestamp DESC")
     fun getHistoryForNotification(notificationId: Long): LiveData<List<ConversationHistory>>
     

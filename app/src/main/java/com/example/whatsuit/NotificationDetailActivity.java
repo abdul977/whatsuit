@@ -9,13 +9,14 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
-import com.example.whatsuit.adapter.RelatedNotificationsAdapter;
+import com.example.whatsuit.adapter.DetailPagerAdapter;
 import com.example.whatsuit.util.AutoReplyManager;
 import com.example.whatsuit.util.TimeFilterHelper;
 import com.example.whatsuit.viewmodel.NotificationDetailViewModel;
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
 
 public class NotificationDetailActivity extends AppCompatActivity {
     private TextView appNameTextView;
@@ -23,7 +24,9 @@ public class NotificationDetailActivity extends AppCompatActivity {
     private NotificationDetailViewModel viewModel;
     private TimeFilterHelper timeFilterHelper;
     private AutoReplyManager autoReplyManager;
-    private RelatedNotificationsAdapter adapter;
+    private ViewPager2 viewPager;
+    private TabLayout tabLayout;
+    private DetailPagerAdapter pagerAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,23 +36,20 @@ public class NotificationDetailActivity extends AppCompatActivity {
         initializeViews();
         setupViewModel();
         setupHelpers();
+        setupViewPager();
         handleIntent(getIntent());
     }
 
     private void initializeViews() {
         titleTextView = findViewById(R.id.titleTextView);
         appNameTextView = findViewById(R.id.appNameTextView);
+        viewPager = findViewById(R.id.viewPager);
+        tabLayout = findViewById(R.id.tabLayout);
 
         // Set up toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-
-        // Set up RecyclerView
-        RecyclerView recyclerView = findViewById(R.id.relatedNotificationsRecyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new RelatedNotificationsAdapter();
-        recyclerView.setAdapter(adapter);
     }
 
     private void setupViewModel() {
@@ -65,10 +65,6 @@ public class NotificationDetailActivity extends AppCompatActivity {
                 finish();
             }
         });
-
-        viewModel.getRelatedNotifications().observe(this, notifications -> {
-            adapter.setNotifications(notifications);
-        });
     }
 
     private void setupHelpers() {
@@ -76,6 +72,24 @@ public class NotificationDetailActivity extends AppCompatActivity {
             viewModel.filterNotificationsByTimeRange(startTime, endTime));
 
         autoReplyManager = new AutoReplyManager(this);
+    }
+
+    private void setupViewPager() {
+        pagerAdapter = new DetailPagerAdapter(this);
+        viewPager.setAdapter(pagerAdapter);
+
+        new TabLayoutMediator(tabLayout, viewPager,
+            (tab, position) -> {
+                switch (position) {
+                    case DetailPagerAdapter.POSITION_NOTIFICATIONS:
+                        tab.setText(R.string.tab_notifications);
+                        break;
+                    case DetailPagerAdapter.POSITION_CONVERSATIONS:
+                        tab.setText(R.string.tab_conversations);
+                        break;
+                }
+            }
+        ).attach();
     }
 
     @Override
@@ -139,6 +153,11 @@ public class NotificationDetailActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        autoReplyManager.shutdown();
+        if (autoReplyManager != null) {
+            autoReplyManager.shutdown();
+        }
+        if (viewPager != null) {
+            viewPager.setAdapter(null);
+        }
     }
 }

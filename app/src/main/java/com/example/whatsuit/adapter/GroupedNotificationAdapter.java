@@ -1,38 +1,30 @@
 package com.example.whatsuit.adapter;
 
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
-import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.DiffUtil;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.whatsuit.MainActivity;
 import com.example.whatsuit.NotificationDetailActivity;
 import com.example.whatsuit.R;
-import com.example.whatsuit.data.AppDatabase;
-import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.util.AutoReplyManager;
 import com.google.android.material.chip.Chip;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,19 +33,20 @@ import java.util.Map;
 import java.util.Objects;
 
 public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
-    private static final int TYPE_APP_HEADER = 0;
-    private static final int TYPE_CONVERSATION_HEADER = 1;
-    private static final int TYPE_NOTIFICATION = 2;
+    private static final int TYPE_HEADER = 0;
+    private static final int TYPE_NOTIFICATION = 1;
 
     private final PackageManager packageManager;
     private final List<Object> items = new ArrayList<>();
-    private final Map<String, Boolean> expandedApps = new HashMap<>();
-    private final Map<String, Boolean> expandedConversations = new HashMap<>();
+    private final Map<GroupKey, Boolean> expandedGroups = new HashMap<>();
+    private final Map<GroupKey, List<NotificationEntity>> groupedNotifications = new HashMap<>();
     private final AutoReplyManager autoReplyManager;
+    private final Handler mainHandler;
 
     public GroupedNotificationAdapter(PackageManager packageManager, AutoReplyManager autoReplyManager) {
         this.packageManager = packageManager;
         this.autoReplyManager = autoReplyManager;
+        this.mainHandler = new Handler(Looper.getMainLooper());
         setHasStableIds(true);
     }
 
@@ -61,65 +54,54 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
-        View view;
-        switch (viewType) {
-            case TYPE_APP_HEADER:
-                view = inflater.inflate(R.layout.item_app_header, parent, false);
-                return new AppHeaderViewHolder(view);
-            case TYPE_CONVERSATION_HEADER:
-                view = inflater.inflate(R.layout.item_app_header, parent, false); // Reuse same layout
-                return new ConversationHeaderViewHolder(view);
-            default:
-                view = inflater.inflate(R.layout.item_notification, parent, false);
-                return new NotificationViewHolder(view);
+        if (viewType == TYPE_HEADER) {
+            View view = inflater.inflate(R.layout.item_app_header, parent, false);
+            return new HeaderViewHolder(view);
+        } else {
+            View view = inflater.inflate(R.layout.item_notification, parent, false);
+            return new NotificationViewHolder(view);
         }
     }
 
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        if (holder instanceof AppHeaderViewHolder) {
-            bindAppHeaderViewHolder((AppHeaderViewHolder) holder, (AppHeader) items.get(position));
-        } else if (holder instanceof ConversationHeaderViewHolder) {
-            bindConversationHeaderViewHolder((ConversationHeaderViewHolder) holder, (ConversationHeader) items.get(position));
+        if (holder instanceof HeaderViewHolder) {
+            bindHeaderViewHolder((HeaderViewHolder) holder, (GroupHeader) items.get(position));
         } else {
-            bindNotificationViewHolder((NotificationViewHolder) holder, (NotificationEntity) items.get(position));
+            bindNotificationViewHolder((NotificationViewHolder) holder, position);
         }
     }
 
-    private void bindAppHeaderViewHolder(AppHeaderViewHolder holder, AppHeader header) {
-        holder.appName.setText(header.appName);
+    private void bindHeaderViewHolder(HeaderViewHolder holder, GroupHeader header) {
+        holder.appName.setText(header.displayTitle);
         holder.notificationCount.setText(String.valueOf(header.count));
 
         try {
-            Drawable icon = packageManager.getApplicationIcon(header.packageName);
+            Drawable icon = packageManager.getApplicationIcon(header.getPackageName());
             holder.appIcon.setImageDrawable(icon);
         } catch (PackageManager.NameNotFoundException e) {
             holder.appIcon.setImageResource(R.drawable.ic_app_placeholder);
         }
 
-        boolean isExpanded = expandedApps.getOrDefault(header.packageName, false);
-        holder.expandIcon.setRotation(isExpanded ? 180 : 0);
+        boolean isExpanded = expandedGroups.getOrDefault(header.groupKey, false);
+        holder.itemView.setOnClickListener(v -> toggleGroup(header.groupKey, holder.getAdapterPosition()));
 
-        holder.itemView.setOnClickListener(v -> toggleApp(header.packageName, holder.getAdapterPosition()));
+        // Rotate expand icon based on expanded state
+        holder.expandIcon.setRotation(isExpanded ? 180 : 0);
     }
 
-    private void bindConversationHeaderViewHolder(ConversationHeaderViewHolder holder, ConversationHeader header) {
-        holder.appIcon.setVisibility(View.GONE); // Hide app icon for conversation header
-        holder.appName.setText(header.displayTitle);
-        holder.notificationCount.setText(String.valueOf(header.count));
-        
-        boolean isExpanded = expandedConversations.getOrDefault(header.conversationId, false);
-        holder.expandIcon.setRotation(isExpanded ? 180 : 0);
-
-        holder.itemView.setOnClickListener(v -> toggleConversation(header.conversationId, holder.getAdapterPosition()));
-    }
-
-    private void bindNotificationViewHolder(NotificationViewHolder holder, NotificationEntity notification) {
+    private void bindNotificationViewHolder(NotificationViewHolder holder, int position) {
+        NotificationEntity notification = (NotificationEntity) items.get(position);
         holder.notificationTitle.setText(notification.getTitle());
         holder.notificationContent.setText(notification.getContent());
+        
+        // Set up menu button
         holder.menuButton.setOnClickListener(v -> showPopupMenu(v, notification));
-        updateAutoReplyStatus(holder, notification);
+        
+        // Update auto-reply status chip
+        updateAutoReplyStatusAsync(holder, notification);
 
+        // Set click listener for the whole card
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(v.getContext(), NotificationDetailActivity.class);
             intent.putExtra("notification_id", notification.getId());
@@ -127,60 +109,34 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         });
     }
 
-    private void updateAutoReplyStatus(NotificationViewHolder holder, NotificationEntity notification) {
-        autoReplyManager.isAutoReplyDisabled(
-            notification.getPackageName(),
-            notification.getConversationId(),
-            "",
-            isDisabled -> {
-                if (holder.autoReplyStatusChip != null) {
-                    holder.autoReplyStatusChip.setText(isDisabled ?
-                        R.string.auto_reply_disabled : R.string.auto_reply_enabled);
-                    holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
-                }
-            }
-        );
-    }
-
     private void showPopupMenu(View view, NotificationEntity notification) {
         PopupMenu popup = new PopupMenu(view.getContext(), view);
         MenuInflater inflater = popup.getMenuInflater();
         inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
 
-        // Update auto-reply menu item state
-        autoReplyManager.isAutoReplyDisabled(
-            notification.getPackageName(),
-            notification.getConversationId(),
-            "",
-            isDisabled -> {
-                MenuItem toggleItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
-                if (toggleItem != null) {
-                    toggleItem.setTitle(isDisabled ? 
-                        R.string.enable_auto_reply : R.string.disable_auto_reply);
-                }
-            }
-        );
+        MenuItem autoReplyItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
+        autoReplyItem.setEnabled(false);
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(notification.getPackageName(), info.phoneNumber, info.titlePrefix,
+            isDisabled -> mainHandler.post(() -> {
+                autoReplyItem.setTitle(isDisabled ? "Enable Auto-Reply" : "Disable Auto-Reply");
+                autoReplyItem.setEnabled(true);
+            }));
 
         popup.setOnMenuItemClickListener(item -> {
-            int itemId = item.getItemId();
-            if (itemId == R.id.action_toggle_auto_reply) {
-                // Toggle auto-reply using AutoReplyManager
-                autoReplyManager.toggleAutoReply(
-                    notification.getPackageName(),
-                    notification.getConversationId(),
-                    "",
-                    isDisabled -> notifyItemChanged(items.indexOf(notification))
-                );
+            if (item.getItemId() == R.id.action_toggle_auto_reply) {
+                toggleAutoReply(notification);
                 return true;
-            } else if (itemId == R.id.action_view_details) {
-                // Launch detail activity
+            } else if (item.getItemId() == R.id.action_view_details) {
                 Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
                 intent.putExtra("notification_id", notification.getId());
                 view.getContext().startActivity(intent);
                 return true;
-            } else if (itemId == R.id.action_view_history) {
-                // Show conversation history dialog
-                showHistoryDialog(view.getContext(), notification);
+            } else if (item.getItemId() == R.id.action_view_history) {
+                if (view.getContext() instanceof MainActivity) {
+                    ((MainActivity) view.getContext()).showConversationHistory(notification);
+                }
                 return true;
             }
             return false;
@@ -189,175 +145,74 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         popup.show();
     }
 
-    private void showHistoryDialog(Context context, NotificationEntity notification) {
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context);
-        
-        View dialogView = LayoutInflater.from(context).inflate(
-            R.layout.dialog_conversation_history,
-            null
-        );
-        
-        RecyclerView historyRecyclerView = dialogView.findViewById(R.id.historyRecyclerView);
-        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
-        View closeButton = dialogView.findViewById(R.id.closeButton);
-        
-        // Set empty state text
-        if (emptyStateText != null) {
-            emptyStateText.setText(R.string.no_history);
-        }
-        
-        historyRecyclerView.setLayoutManager(new LinearLayoutManager(context));
-        ConversationHistoryAdapter historyAdapter = new ConversationHistoryAdapter();
-        historyRecyclerView.setAdapter(historyAdapter);
-        
-        AlertDialog dialog = builder
-            .setView(dialogView)
-            .setTitle(R.string.conversation_history)
-            .setCancelable(true)
-            .create();
-
-        if (closeButton != null) {
-            closeButton.setOnClickListener(v -> dialog.dismiss());
-        }
-        
-        // Load history using the conversationId with a background thread
-        new Thread(() -> {
-            final AppDatabase db = AppDatabase.getDatabase(context);
-            try {
-                // Get conversation history using a synchronous approach - directly from notification id
-                final List<ConversationHistory> history = db.conversationHistoryDao()
-                    .getHistoryForNotificationSync(notification.getId());
-                
-                // Update UI on main thread
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (history != null && !history.isEmpty()) {
-                        historyAdapter.setHistory(history);
-                        historyRecyclerView.setVisibility(View.VISIBLE);
-                        emptyStateText.setVisibility(View.GONE);
-                    } else {
-                        historyRecyclerView.setVisibility(View.GONE);
-                        emptyStateText.setVisibility(View.VISIBLE);
-                    }
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-                // Show error on main thread
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    emptyStateText.setText(R.string.error_loading_history);
-                    historyRecyclerView.setVisibility(View.GONE);
-                    emptyStateText.setVisibility(View.VISIBLE);
-                });
-            }
-        }).start();
-        
-        dialog.show();
-
-        if (dialog.getWindow() != null) {
-            WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            dialog.getWindow().setAttributes(params);
-        }
+    private void toggleAutoReply(NotificationEntity notification) {
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        autoReplyManager.toggleAutoReply(notification.getPackageName(), info.phoneNumber, info.titlePrefix, 
+            isDisabled -> notifyDataSetChanged());
     }
 
-    public void updateNotifications(List<NotificationEntity> notifications) {
-        Map<String, AppHeader> appHeaders = new HashMap<>();
-        Map<String, List<NotificationEntity>> appGroups = new HashMap<>();
-        
-        // First, group notifications by app
-        for (NotificationEntity notification : notifications) {
-            String packageName = notification.getPackageName();
-            appGroups.computeIfAbsent(packageName, k -> new ArrayList<>()).add(notification);
-            
-            if (!appHeaders.containsKey(packageName)) {
-                appHeaders.put(packageName, new AppHeader(
-                    packageName,
-                    notification.getAppName(),
-                    0 // Count will be updated later
-                ));
-            }
-        }
+    private void updateAutoReplyStatusAsync(NotificationViewHolder holder, NotificationEntity notification) {
+        holder.autoReplyStatusChip.setEnabled(false);
+        holder.autoReplyStatusChip.setText("Loading...");
+        holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
 
-        // Build the final list with proper hierarchy
-        List<Object> newItems = new ArrayList<>();
-        for (Map.Entry<String, List<NotificationEntity>> entry : appGroups.entrySet()) {
-            String packageName = entry.getKey();
-            List<NotificationEntity> appNotifications = entry.getValue();
-            AppHeader appHeader = appHeaders.get(packageName);
-            appHeader.count = appNotifications.size();
-            
-            // Add app header
-            newItems.add(appHeader);
-            
-            // If app is expanded, add its conversations
-            if (expandedApps.getOrDefault(packageName, false)) {
-                Map<String, List<NotificationEntity>> conversations = new HashMap<>();
-                
-                // Group by conversation ID within app
-                for (NotificationEntity notification : appNotifications) {
-                    conversations.computeIfAbsent(
-                        notification.getConversationId(),
-                        k -> new ArrayList<>()
-                    ).add(notification);
-                }
-                
-                // Add conversation headers and notifications
-                for (Map.Entry<String, List<NotificationEntity>> convEntry : conversations.entrySet()) {
-                    String conversationId = convEntry.getKey();
-                    List<NotificationEntity> conversationNotifs = convEntry.getValue();
-                    NotificationEntity firstNotif = conversationNotifs.get(0);
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(
+            notification.getPackageName(), 
+            info.phoneNumber,
+            info.titlePrefix,
+            isDisabled -> {
+                mainHandler.post(() -> {
+                    holder.autoReplyStatusChip.setText(isDisabled ? "Auto-reply disabled" : "Auto-reply enabled");
+                    holder.autoReplyStatusChip.setEnabled(true);
                     
-                    ConversationHeader convHeader = new ConversationHeader(
-                        conversationId,
-                        firstNotif.getTitle(),
-                        conversationNotifs.size()
-                    );
-                    newItems.add(convHeader);
-                    
-                    // If conversation is expanded, add its notifications
-                    if (expandedConversations.getOrDefault(conversationId, false)) {
-                        newItems.addAll(conversationNotifs);
-                    }
-                }
-            }
+                    holder.autoReplyStatusChip.setChipBackgroundColorResource(isDisabled ? 
+                        R.color.md_theme_errorContainer : R.color.md_theme_primaryContainer);
+                    holder.autoReplyStatusChip.setTextColor(holder.autoReplyStatusChip.getContext().getColor(isDisabled ? 
+                        R.color.md_theme_onErrorContainer : R.color.md_theme_onPrimaryContainer));
+                });
+            });
+    }
+
+    private static class ExtractedInfo {
+        final String phoneNumber;
+        final String titlePrefix;
+
+        ExtractedInfo(String phoneNumber, String titlePrefix) {
+            this.phoneNumber = phoneNumber;
+            this.titlePrefix = titlePrefix;
         }
-
-        // Update the adapter
-        DiffUtil.calculateDiff(new NotificationDiffCallback(items, newItems))
-                .dispatchUpdatesTo(this);
-        items.clear();
-        items.addAll(newItems);
     }
 
-    private void toggleApp(String packageName, int position) {
-        boolean expanded = expandedApps.getOrDefault(packageName, false);
-        expandedApps.put(packageName, !expanded);
-        // Trigger a refresh to update the list
-        notifyItemChanged(position);
-    }
-
-    private void toggleConversation(String conversationId, int position) {
-        boolean expanded = expandedConversations.getOrDefault(conversationId, false);
-        expandedConversations.put(conversationId, !expanded);
-        // Trigger a refresh to update the list
-        notifyItemChanged(position);
+    private ExtractedInfo extractIdentifierInfo(NotificationEntity notification) {
+        String phoneNumber = "";
+        String titlePrefix = "";
+        
+        if (notification.getPackageName().contains("whatsapp") && 
+            notification.getContent() != null && 
+            notification.getContent().matches(".*[0-9+].*")) {
+            String content = notification.getContent();
+            String extracted = content.replaceAll("[^0-9+\\-]", "");
+            phoneNumber = extracted.replaceAll("[^0-9]", "");
+        } else if (notification.getTitle() != null && !notification.getTitle().isEmpty()) {
+            titlePrefix = notification.getTitle().substring(0, 
+                Math.min(5, notification.getTitle().length()));
+        }
+        
+        return new ExtractedInfo(phoneNumber, titlePrefix);
     }
 
     @Override
     public int getItemViewType(int position) {
-        Object item = items.get(position);
-        if (item instanceof AppHeader) return TYPE_APP_HEADER;
-        if (item instanceof ConversationHeader) return TYPE_CONVERSATION_HEADER;
-        return TYPE_NOTIFICATION;
+        return items.get(position) instanceof GroupHeader ? TYPE_HEADER : TYPE_NOTIFICATION;
     }
 
     @Override
     public long getItemId(int position) {
         Object item = items.get(position);
-        if (item instanceof AppHeader) {
-            return ((AppHeader) item).packageName.hashCode();
-        } else if (item instanceof ConversationHeader) {
-            return ((ConversationHeader) item).conversationId.hashCode();
+        if (item instanceof GroupHeader) {
+            return ((GroupHeader) item).groupKey.hashCode();
         } else {
             return ((NotificationEntity) item).getId();
         }
@@ -368,52 +223,150 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         return items.size();
     }
 
-    static class AppHeader {
-        final String packageName;
-        final String appName;
-        int count;
+    public void updateNotifications(List<NotificationEntity> notifications) {
+        Map<GroupKey, Boolean> previousExpandedStates = new HashMap<>(expandedGroups);
 
-        AppHeader(String packageName, String appName, int count) {
-            this.packageName = packageName;
-            this.appName = appName;
-            this.count = count;
+        groupedNotifications.clear();
+        
+        // Group notifications by either phone number or title prefix
+        for (NotificationEntity notification : notifications) {
+            GroupKey groupKey = createGroupKey(notification);
+            groupedNotifications.computeIfAbsent(groupKey, k -> new ArrayList<>()).add(notification);
+        }
+        
+        List<Object> newItems = new ArrayList<>();
+        for (Map.Entry<GroupKey, List<NotificationEntity>> entry : groupedNotifications.entrySet()) {
+            GroupKey groupKey = entry.getKey();
+            List<NotificationEntity> groupNotifications = entry.getValue();
+            
+            // Create group header with appropriate title based on group type
+            String headerTitle;
+            if (groupKey.isPhoneNumberGroup) {
+                // For phone number groups, use the full number as title
+                headerTitle = groupKey.identifier;
+            } else {
+                // For text groups, use the original title
+                headerTitle = groupNotifications.get(0).getTitle();
+            }
+            
+            GroupHeader header = new GroupHeader(
+                groupKey,
+                groupNotifications.get(0).getAppName(),
+                headerTitle,
+                groupNotifications.size()
+            );
+            newItems.add(header);
+
+            boolean wasExpanded = previousExpandedStates.getOrDefault(header.groupKey, false);
+            expandedGroups.put(header.groupKey, wasExpanded);
+
+            if (wasExpanded) {
+                newItems.addAll(groupNotifications);
+            }
+        }
+
+        DiffUtil.calculateDiff(new NotificationDiffCallback(items, newItems))
+               .dispatchUpdatesTo(this);
+        
+        items.clear();
+        items.addAll(newItems);
+    }
+
+    private void toggleGroup(GroupKey groupKey, int headerPosition) {
+        boolean expanded = expandedGroups.getOrDefault(groupKey, false);
+        expandedGroups.put(groupKey, !expanded);
+        
+        List<NotificationEntity> notifications = groupedNotifications.get(groupKey);
+        if (notifications != null) {
+            if (!expanded) {
+                items.addAll(headerPosition + 1, notifications);
+                notifyItemRangeInserted(headerPosition + 1, notifications.size());
+            } else {
+                items.subList(headerPosition + 1, headerPosition + 1 + notifications.size()).clear();
+                notifyItemRangeRemoved(headerPosition + 1, notifications.size());
+            }
+            notifyItemChanged(headerPosition);
         }
     }
 
-    static class ConversationHeader {
-        final String conversationId;
-        final String displayTitle;
-        final int count;
+    private GroupKey createGroupKey(NotificationEntity notification) {
+        String identifier;
+        boolean isPhoneNumberGroup = false;
 
-        ConversationHeader(String conversationId, String displayTitle, int count) {
-            this.conversationId = conversationId;
+        if (notification.getPackageName().contains("whatsapp") && 
+            notification.getTitle() != null && 
+            notification.getTitle().matches(".*[0-9+].*")) {
+            // Extract and clean phone number from the title
+            String extracted = notification.getTitle().replaceAll("[^0-9+\\-]", "");
+            identifier = extracted.replaceAll("[^0-9]", "");
+            // Only create phone number group if we have 11 digits
+            if (identifier.length() == 11) {
+                isPhoneNumberGroup = true;
+            } else {
+                // Fallback to title prefix if not a valid phone number
+                identifier = notification.getTitle().substring(0, 
+                    Math.min(5, notification.getTitle().length()));
+            }
+        } else {
+            // Use title prefix for non-phone number notifications
+            identifier = notification.getTitle().substring(0, 
+                Math.min(10, notification.getTitle().length()));
+        }
+
+        return new GroupKey(notification.getPackageName(), identifier, isPhoneNumberGroup);
+    }
+
+    private static class GroupKey {
+        final String packageName;
+        final String identifier;
+        final boolean isPhoneNumberGroup;
+
+        GroupKey(String packageName, String identifier, boolean isPhoneNumberGroup) {
+            this.packageName = packageName;
+            this.identifier = identifier;
+            this.isPhoneNumberGroup = isPhoneNumberGroup;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(packageName, identifier);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            GroupKey other = (GroupKey) o;
+            return Objects.equals(packageName, other.packageName) &&
+                   Objects.equals(identifier, other.identifier);
+        }
+    }
+
+    static class GroupHeader {
+        GroupKey groupKey;
+        String appName;
+        String displayTitle;
+        int count;
+
+        GroupHeader(GroupKey groupKey, String appName, String displayTitle, int count) {
+            this.groupKey = groupKey;
+            this.appName = appName;
             this.displayTitle = displayTitle;
             this.count = count;
         }
-    }
 
-    static class AppHeaderViewHolder extends RecyclerView.ViewHolder {
-        ImageView appIcon;
-        TextView appName;
-        Chip notificationCount;
-        ImageView expandIcon;
-
-        AppHeaderViewHolder(View itemView) {
-            super(itemView);
-            appIcon = itemView.findViewById(R.id.appIcon);
-            appName = itemView.findViewById(R.id.appName);
-            notificationCount = itemView.findViewById(R.id.notificationCount);
-            expandIcon = itemView.findViewById(R.id.expandIcon);
+        String getPackageName() {
+            return groupKey.packageName;
         }
     }
 
-    static class ConversationHeaderViewHolder extends RecyclerView.ViewHolder {
+    static class HeaderViewHolder extends RecyclerView.ViewHolder {
         ImageView appIcon;
         TextView appName;
         Chip notificationCount;
         ImageView expandIcon;
 
-        ConversationHeaderViewHolder(View itemView) {
+        HeaderViewHolder(View itemView) {
             super(itemView);
             appIcon = itemView.findViewById(R.id.appIcon);
             appName = itemView.findViewById(R.id.appName);
@@ -465,13 +418,9 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
                 return false;
             }
 
-            if (oldItem instanceof AppHeader) {
-                return ((AppHeader) oldItem).packageName.equals(
-                    ((AppHeader) newItem).packageName
-                );
-            } else if (oldItem instanceof ConversationHeader) {
-                return ((ConversationHeader) oldItem).conversationId.equals(
-                    ((ConversationHeader) newItem).conversationId
+            if (oldItem instanceof GroupHeader) {
+                return ((GroupHeader) oldItem).groupKey.equals(
+                    ((GroupHeader) newItem).groupKey
                 );
             } else {
                 return ((NotificationEntity) oldItem).getId() ==
@@ -484,14 +433,9 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             Object oldItem = oldItems.get(oldItemPosition);
             Object newItem = newItems.get(newItemPosition);
 
-            if (oldItem instanceof AppHeader) {
-                AppHeader oldHeader = (AppHeader) oldItem;
-                AppHeader newHeader = (AppHeader) newItem;
-                return oldHeader.count == newHeader.count &&
-                       oldHeader.appName.equals(newHeader.appName);
-            } else if (oldItem instanceof ConversationHeader) {
-                ConversationHeader oldHeader = (ConversationHeader) oldItem;
-                ConversationHeader newHeader = (ConversationHeader) newItem;
+            if (oldItem instanceof GroupHeader) {
+                GroupHeader oldHeader = (GroupHeader) oldItem;
+                GroupHeader newHeader = (GroupHeader) newItem;
                 return oldHeader.count == newHeader.count &&
                        oldHeader.displayTitle.equals(newHeader.displayTitle);
             } else {

@@ -7,6 +7,8 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
+import com.example.whatsuit.data.migrations.Migration7To8;
+import com.example.whatsuit.data.migrations.Migration8To9;
 
 @Database(
     entities = {
@@ -16,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
         PromptTemplate.class,
         AppSettingEntity.class
     },
-    version = 6,
+    version = 9,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -49,15 +51,17 @@ public abstract class AppDatabase extends RoomDatabase {
                 ")"
             );
 
-            // Create conversation_history table
+            // Create conversation_history table with all required columns
             database.execSQL(
                 "CREATE TABLE IF NOT EXISTS conversation_history (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "notification_id INTEGER, " +
-                "message TEXT NOT NULL, " +
+                "isModified INTEGER NOT NULL DEFAULT 0, " +
+                "conversationId TEXT NOT NULL, " +
                 "response TEXT NOT NULL, " +
-                "timestamp INTEGER DEFAULT (strftime('%s', 'now') * 1000), " +
-                "FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE" +
+                "notificationId INTEGER NOT NULL, " +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "message TEXT NOT NULL, " +
+                "timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000), " +
+                "FOREIGN KEY (notificationId) REFERENCES notifications(id) ON DELETE CASCADE" +
                 ")"
             );
 
@@ -72,10 +76,14 @@ public abstract class AppDatabase extends RoomDatabase {
                 ")"
             );
 
-            // Create index for conversation history
+            // Create indices for conversation history
             database.execSQL(
-                "CREATE INDEX IF NOT EXISTS idx_conversation_notification_id " +
-                "ON conversation_history(notification_id)"
+                "CREATE INDEX IF NOT EXISTS index_conversation_history_notificationId " +
+                "ON conversation_history(notificationId)"
+            );
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_conversation_history_conversationId " +
+                "ON conversation_history(conversationId)"
             );
 
             // Insert default prompt template
@@ -127,12 +135,61 @@ public abstract class AppDatabase extends RoomDatabase {
             );
         }
     };
-
+    
     static final Migration MIGRATION_5_6 = new Migration(5, 6) {
         @Override
         public void migrate(SupportSQLiteDatabase database) {
-            // Load the Migration4To5 Kotlin class which updates the prompt templates
-            new com.example.whatsuit.data.migrations.Migration4To5().migrate(database);
+            // Drop and recreate conversation_history table with all required columns
+            database.execSQL("DROP TABLE IF EXISTS conversation_history_temp");
+            
+            // Create new table with all columns
+            database.execSQL(
+                "CREATE TABLE IF NOT EXISTS conversation_history_temp (" +
+                "isModified INTEGER NOT NULL DEFAULT 0, " +
+                "conversationId TEXT NOT NULL, " +
+                "response TEXT NOT NULL, " +
+                "notificationId INTEGER NOT NULL, " +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "message TEXT NOT NULL, " +
+                "timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000), " +
+                "FOREIGN KEY (notificationId) REFERENCES notifications(id) ON DELETE CASCADE" +
+                ")"
+            );
+            
+            // Copy data from old table
+            database.execSQL(
+                "INSERT INTO conversation_history_temp (isModified, conversationId, response, notificationId, id, message, timestamp) " +
+                "SELECT 0, conversationId, response, notificationId, id, message, timestamp " +
+                "FROM conversation_history"
+            );
+            
+            // Drop old table
+            database.execSQL("DROP TABLE conversation_history");
+            
+            // Rename new table to original name
+            database.execSQL("ALTER TABLE conversation_history_temp RENAME TO conversation_history");
+            
+            // Recreate indices
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_conversation_history_notificationId " +
+                "ON conversation_history(notificationId)"
+            );
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_conversation_history_conversationId " +
+                "ON conversation_history(conversationId)"
+            );
+        }
+    };
+
+    static final Migration MIGRATION_6_7 = new Migration(6, 7) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Add autoReplyDisabled column to notifications table
+            database.execSQL("ALTER TABLE notifications " +
+                           "ADD COLUMN autoReplyDisabled INTEGER NOT NULL DEFAULT 0");
+            
+            // Set default value for existing records
+            database.execSQL("UPDATE notifications SET autoReplyDisabled = 0");
         }
     };
 
@@ -145,7 +202,8 @@ public abstract class AppDatabase extends RoomDatabase {
                             AppDatabase.class,
                             "notification_database"
                     )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, new Migration7To8(), new Migration8To9())
+                    .fallbackToDestructiveMigration()  // Allow database recreation if migration fails
                     .build();
                 }
             }

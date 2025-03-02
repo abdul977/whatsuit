@@ -165,9 +165,12 @@ class GeminiService(private val context: Context) {
                     // Check if notification exists before starting transaction
                     val notification = database.notificationDao().getNotificationByIdSync(notificationId)
                     if (notification != null) {
+                        val conversationId = notification.conversationId ?: ""
+
                         try {
                             val conversationHistory = ConversationHistory(
                                 notificationId = notificationId,
+                                conversationId = conversationId,
                                 message = message,
                                 response = finalResponse,
                                 timestamp = System.currentTimeMillis()

@@ -22,30 +22,41 @@ import com.google.gson.annotations.SerializedName
         )
     ],
     indices = [
-        Index("notificationId")
+        Index("notificationId"),
+        Index("conversationId")
     ]
 )
 data class ConversationHistory(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    
     /**
-     * Reference to the notification this conversation belongs to
+     * Flag indicating if this entry has been modified
      */
-    val notificationId: Long,
-    
+    val isModified: Boolean = false,
+
     /**
-     * The user's message or notification content
+     * Unique identifier for the conversation thread
      */
-    val message: String,
-    
+    val conversationId: String,
+
     /**
      * The AI-generated response
      */
     val response: String,
-    
+
     /**
-     * Timestamp of when this conversation entry was created
+     * Reference to the notification this conversation belongs to
+     */
+    val notificationId: Long,
+
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+
+    /**
+     * The user's message or notification content
+     */
+    val message: String,
+
+    /**
+     * Timestamp of when this conversation entry was created or last modified
      */
     val timestamp: Long = System.currentTimeMillis()
 ) {
@@ -56,6 +67,35 @@ data class ConversationHistory(
     fun isRecent(): Boolean {
         val twentyFourHoursInMillis = 24 * 60 * 60 * 1000L
         return System.currentTimeMillis() - timestamp < twentyFourHoursInMillis
+    }
+
+    /**
+     * Creates a copy with modified content and updated timestamp
+     */
+    fun withModifiedContent(
+        newMessage: String? = null,
+        newResponse: String? = null
+    ) = copy(
+        message = newMessage?.trim() ?: message,
+        response = newResponse?.trim() ?: response,
+        timestamp = System.currentTimeMillis(),
+        isModified = true
+    )
+
+    /**
+     * Validates if the content is valid for editing
+     * @return Pair<Boolean, String?> where first is validity and second is error message if invalid
+     */
+    fun validateEdit(newMessage: String?, newResponse: String?): Pair<Boolean, String?> {
+        if (newMessage?.isBlank() == true || newResponse?.isBlank() == true) {
+            return Pair(false, "Message and response cannot be empty")
+        }
+
+        if (newMessage == message && newResponse == response) {
+            return Pair(false, "No changes made")
+        }
+
+        return Pair(true, null)
     }
 
     fun toJson(): String = Gson().toJson(this)
@@ -73,9 +113,13 @@ data class ConversationHistory(
             message: String,
             response: String
         ) = ConversationHistory(
+            isModified = false,
+            conversationId = "",  // Will be updated by Room after insert
+            response = response,
             notificationId = notificationId,
+            id = 0,
             message = message,
-            response = response
+            timestamp = System.currentTimeMillis()
         )
     }
 }

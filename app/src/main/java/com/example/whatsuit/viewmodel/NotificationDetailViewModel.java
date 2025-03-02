@@ -4,21 +4,28 @@ import android.app.Application;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
+import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
-import java.util.List;
+import com.example.whatsuit.data.ConversationHistory;
 
 public class NotificationDetailViewModel extends AndroidViewModel {
     private final AppDatabase database;
     private final MutableLiveData<NotificationEntity> currentNotification;
     private final MutableLiveData<List<NotificationEntity>> relatedNotifications;
+    private final MutableLiveData<List<ConversationHistory>> conversations;
+    private final Executor executor;
 
     public NotificationDetailViewModel(Application application) {
         super(application);
         database = AppDatabase.getDatabase(application);
         currentNotification = new MutableLiveData<>();
         relatedNotifications = new MutableLiveData<>();
+        conversations = new MutableLiveData<>();
+        executor = Executors.newSingleThreadExecutor();
     }
 
     public void loadNotification(long notificationId) {
@@ -26,6 +33,7 @@ public class NotificationDetailViewModel extends AndroidViewModel {
                 .observeForever(notification -> {
                     currentNotification.setValue(notification);
                     loadRelatedNotifications(notificationId);
+                    loadConversations(notificationId);
                 });
     }
 
@@ -34,6 +42,31 @@ public class NotificationDetailViewModel extends AndroidViewModel {
                 .observeForever(notifications -> {
                     relatedNotifications.setValue(notifications);
                 });
+    }
+
+    private void loadConversations(long notificationId) {
+        database.getConversationHistoryDao()
+               .getHistoryForNotification(notificationId)
+               .observeForever(history -> {
+                   conversations.setValue(history);
+               });
+    }
+
+    public void editConversation(ConversationHistory conversation, String newMessage, String newResponse) {
+        executor.execute(() -> {
+            try {
+                // Use the synchronous version of the DAO method instead of the suspending function
+                database.getConversationHistoryDao().updateConversationContentSync(
+                    conversation.getId(),
+                    newMessage,
+                    newResponse,
+                    System.currentTimeMillis()
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Handle error if needed
+            }
+        });
     }
 
     public void filterNotificationsByTimeRange(long startTime, long endTime) {
@@ -72,9 +105,13 @@ public class NotificationDetailViewModel extends AndroidViewModel {
         return relatedNotifications;
     }
 
+    public LiveData<List<ConversationHistory>> getConversations() {
+        return conversations;
+    }
+
     @Override
     protected void onCleared() {
         super.onCleared();
-        // Remove observers if needed
+        // Clean up observers
     }
 }

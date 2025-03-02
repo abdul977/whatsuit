@@ -102,7 +102,7 @@ public class AutoReplyManager {
         } else {
             String title = notification.getTitle();
             if (title != null && !title.isEmpty()) {
-                titlePrefix = title.substring(0, Math.min(5, title.length()));
+                titlePrefix = title.substring(0, Math.min(10, title.length()));
             }
         }
         

@@ -57,7 +57,6 @@ import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
-import com.plattysoft.leonids.ParticleSystem;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -70,7 +69,6 @@ public class MainActivity extends AppCompatActivity {
     private ImageView splashIcon;
     private ProgressBar splashProgress;
     private TextView splashText;
-    private ParticleSystem particleSystem;
     private RecyclerView recyclerView;
     private GroupedNotificationAdapter notificationAdapter;
     private TextView emptyView;
@@ -111,23 +109,66 @@ public class MainActivity extends AppCompatActivity {
         // Simulate app initialization in background thread
         new Thread(() -> {
             try {
-                // Initialize database
-                AppDatabase db = AppDatabase.getDatabase(this);
+                // Initialize database with error handling
+                AppDatabase db = null;
+                int retryCount = 0;
+                final int MAX_RETRIES = 3;
+                
+                while (retryCount < MAX_RETRIES && db == null) {
+                    try {
+                        db = AppDatabase.getDatabase(this);
+                        // Test database connection
+                        db.notificationDao().getCount();
+                    } catch (Exception e) {
+                        Log.e("MainActivity", "Database initialization attempt " + (retryCount + 1) + " failed", e);
+                        retryCount++;
+                        if (retryCount < MAX_RETRIES) {
+                            Thread.sleep(1000); // Wait before retry
+                        }
+                    }
+                }
+                
+                if (db == null) {
+                    throw new RuntimeException("Failed to initialize database after " + MAX_RETRIES + " attempts");
+                }
+
                 notificationDao = db.notificationDao();
                 conversationHistoryDao = db.conversationHistoryDao();
                 
-                // Initialize managers
-                autoReplyManager = new AutoReplyManager(this);
+                // Initialize managers with error handling
+                try {
+                    autoReplyManager = new AutoReplyManager(this);
+                } catch (Exception e) {
+                    Log.e("MainActivity", "AutoReplyManager initialization failed", e);
+                    // Continue without auto-reply functionality
+                }
                 
-                // Simulate other initialization tasks with delay to show animation
+                // Delay for splash animation
                 Thread.sleep(1200);
                 
-                // Signal completion and start animations
-                new Handler(Looper.getMainLooper()).post(this::startSplashAnimations);
+                // Signal successful completion
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    startSplashAnimations();
+                    // Show success message
+                    Toast.makeText(this, "Initialization successful", Toast.LENGTH_SHORT).show();
+                });
             } catch (Exception e) {
-                Log.e("MainActivity", "Error during initialization", e);
-                // Signal completion even if error occurred
-                new Handler(Looper.getMainLooper()).post(this::startSplashAnimations);
+                Log.e("MainActivity", "Critical error during initialization", e);
+                // Show error dialog on main thread
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Initialization Error")
+                        .setMessage("Failed to initialize app: " + e.getMessage())
+                        .setPositiveButton("Retry", (dialog, which) -> {
+                            // Retry initialization
+                            initializeApp();
+                        })
+                        .setNegativeButton("Exit", (dialog, which) -> {
+                            finish();
+                        })
+                        .setCancelable(false)
+                        .show();
+                });
             }
         }).start();
     }
@@ -162,35 +203,17 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void createParticleEffect() {
-        // Get icon position for particles
-        int[] iconPos = new int[2];
-        splashIcon.getLocationOnScreen(iconPos);
-        int centerX = iconPos[0] + splashIcon.getWidth() / 2;
-        int centerY = iconPos[1] + splashIcon.getHeight() / 2;
-        
-        // Create particle animation
-        particleSystem = new ParticleSystem(MainActivity.this, 100, 
-                R.drawable.notification_particle, 1500);
-        particleSystem
-            .setSpeedModuleAndAngleRange(0.1f, 0.5f, 0, 360)
-            .setScaleRange(0.1f, 0.5f)
-            .setRotationSpeedRange(90, 180)
-            .setAcceleration(0.0001f, 90)
-            .setFadeOut(700)
-            .oneShot(centerX, centerY, 100);
-        
-        // Fade out the splash icon as particles disperse
-        splashIcon.animate()
-            .alpha(0f)
-            .setDuration(700)
-            .setListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    // Once particles and fade out complete, switch to main layout
-                    switchToMainContent();
-                }
-            })
-            .start();
+        // Simple fade out animation
+        ObjectAnimator fadeOut = ObjectAnimator.ofFloat(splashIcon, View.ALPHA, 1f, 0f);
+        fadeOut.setDuration(700)
+;
+        fadeOut.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                switchToMainContent();
+            }
+        });
+        fadeOut.start();
     }
     
     private void switchToMainContent() {
@@ -512,28 +535,38 @@ public class MainActivity extends AppCompatActivity {
     private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
 
     private void loadNotifications() {
-        // Remove any existing observer from the previous LiveData
-        if (currentNotificationsLiveData != null) {
-            currentNotificationsLiveData.removeObservers(this);
-        }
-
-        // Get new LiveData based on current filters
-        currentNotificationsLiveData = selectedPackage == null ?
-                notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
-                notificationDao.getNotificationsForApp(selectedPackage);
-
-        // Observe the new LiveData
-        currentNotificationsLiveData.observe(this, notifications -> {
-            if (notifications != null && !notifications.isEmpty()) {
-                notificationAdapter.updateNotifications(notifications);
-                emptyView.setVisibility(View.GONE);
-                recyclerView.setVisibility(View.VISIBLE);
-            } else {
-                notificationAdapter.updateNotifications(new ArrayList<>());
-                emptyView.setVisibility(View.VISIBLE);
-                recyclerView.setVisibility(View.GONE);
+        try {
+            // Remove any existing observer from the previous LiveData
+            if (currentNotificationsLiveData != null) {
+                currentNotificationsLiveData.removeObservers(this);
             }
-        });
+
+            // Get new LiveData based on current filters
+            currentNotificationsLiveData = selectedPackage == null ?
+                    notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
+                    notificationDao.getNotificationsForApp(selectedPackage);
+
+            // Observe the new LiveData
+            currentNotificationsLiveData.observe(this, notifications -> {
+                try {
+                    if (notifications != null && !notifications.isEmpty()) {
+                        notificationAdapter.updateNotifications(notifications);
+                        emptyView.setVisibility(View.GONE);
+                        recyclerView.setVisibility(View.VISIBLE);
+                    } else {
+                        notificationAdapter.updateNotifications(new ArrayList<>());
+                        emptyView.setVisibility(View.VISIBLE);
+                        recyclerView.setVisibility(View.GONE);
+                    }
+                } catch (Exception e) {
+                    Log.e("MainActivity", "Error updating notifications", e);
+                    Toast.makeText(this, "Error loading notifications. Please try again.", Toast.LENGTH_SHORT).show();
+                }
+            });
+        } catch (Exception e) {
+            Log.e("MainActivity", "Error setting up notifications", e);
+            Toast.makeText(this, "Error initializing notifications. Please restart the app.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private boolean isNotificationServiceEnabled() {
