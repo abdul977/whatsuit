@@ -1,5 +1,9 @@
 package com.example.whatsuit;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.app.DatePickerDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -8,11 +12,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewAnimationUtils;
+import android.view.ViewTreeObserver;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,6 +34,7 @@ import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.LiveData;
@@ -124,21 +138,21 @@ public class MainActivity extends AppCompatActivity {
 
     public void showConversationHistory(NotificationEntity notification) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_conversation_history, null);
+        TextView historyView = dialogView.findViewById(R.id.historyJson);
         TextView titleView = dialogView.findViewById(R.id.historyTitle);
-        TextView emptyStateText = dialogView.findViewById(R.id.emptyStateText);
-        RecyclerView historyRecyclerView = dialogView.findViewById(R.id.historyRecyclerView);
-        
+
         titleView.setText("Conversation History - " + notification.getTitle());
-        emptyStateText.setText("Loading conversation history...");
-        
-        // Set up RecyclerView
-        historyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        ConversationHistoryAdapter historyAdapter = new ConversationHistoryAdapter();
-        historyRecyclerView.setAdapter(historyAdapter);
+        historyView.setText("Loading conversation history...");
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
                 .setPositiveButton("Close", null)
+                .setNeutralButton("Copy", (d, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    ClipData clip = ClipData.newPlainText("Conversation History", historyView.getText().toString());
+                    clipboard.setPrimaryClip(clip);
+                    Toast.makeText(this, "History copied to clipboard", Toast.LENGTH_SHORT).show();
+                })
                 .create();
 
         dialog.show();
@@ -155,13 +169,16 @@ public class MainActivity extends AppCompatActivity {
             // Update UI on main thread
             runOnUiThread(() -> {
                 if (history != null && !history.isEmpty()) {
-                    historyAdapter.setHistory(history);
-                    historyRecyclerView.setVisibility(View.VISIBLE);
-                    emptyStateText.setVisibility(View.GONE);
+                    StringBuilder historyText = new StringBuilder();
+                    for (int i = history.size() - 1; i >= 0; i--) {
+                        ConversationHistory entry = history.get(i);
+                        historyText.append("➤ Message: ").append(entry.getMessage()).append("\n\n");
+                        historyText.append("↳ Response: ").append(entry.getResponse()).append("\n\n");
+                        if (i > 0) historyText.append("-------------------\n\n");
+                    }
+                    historyView.setText(historyText.toString());
                 } else {
-                    historyRecyclerView.setVisibility(View.GONE);
-                    emptyStateText.setVisibility(View.VISIBLE);
-                    emptyStateText.setText("No conversation history available");
+                    historyView.setText("No conversation history available");
                 }
             });
         }).start();
