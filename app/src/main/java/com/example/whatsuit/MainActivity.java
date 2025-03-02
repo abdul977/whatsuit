@@ -57,12 +57,20 @@ import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.plattysoft.leonids.ParticleSystem;
 
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
+    // Animation related fields
+    private boolean isAppReady = false;
+    private View splashOverlay;
+    private ImageView splashIcon;
+    private ProgressBar splashProgress;
+    private TextView splashText;
+    private ParticleSystem particleSystem;
     private RecyclerView recyclerView;
     private GroupedNotificationAdapter notificationAdapter;
     private TextView emptyView;
