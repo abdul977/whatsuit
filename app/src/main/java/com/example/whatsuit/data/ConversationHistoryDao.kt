@@ -110,4 +110,10 @@ interface ConversationHistoryDao {
         WHERE id = :id
     """)
     suspend fun updateAnalysis(id: Long, analysis: String?, timestamp: Long?)
+
+    /**
+     * Inserts a notification without an AI reply into the conversation history
+     */
+    @Insert
+    suspend fun insertNotificationWithoutReply(history: ConversationHistory)
 }

@@ -213,6 +213,10 @@ long id;
             Log.e(TAG, "Error handling notification (Ask Gemini)", e);
             return;
         }
+
+        // Save notification to history
+        saveNotificationToHistory(notificationEntity);
+
         // Check auto-reply settings
         SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
         boolean globalAutoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false);
@@ -592,6 +596,28 @@ long id;
                 job.cancel(null);
             }
             Log.d(TAG, "Service scope cancelled");
+        }
+    }
+
+    private void saveNotificationToHistory(NotificationEntity notificationEntity) {
+        try {
+            ConversationHistory conversationHistory = new ConversationHistory(
+                false,
+                null,
+                null,
+                notificationEntity.getConversationId(),
+                "",
+                notificationEntity.getId(),
+                notificationEntity.getContent(),
+                System.currentTimeMillis()
+            );
+            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (scope, cont) -> {
+                database.conversationHistoryDao().insertNotificationWithoutReply(conversationHistory);
+                return Unit.INSTANCE;
+            });
+            Log.d(TAG, "Notification saved to conversation history");
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving notification to conversation history", e);
         }
     }
 }
