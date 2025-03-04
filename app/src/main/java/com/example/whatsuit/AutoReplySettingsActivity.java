@@ -18,13 +18,18 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class AutoReplySettingsActivity extends AppCompatActivity implements AppSettingsAdapter.OnAppSettingChangedListener {
+public class AutoReplySettingsActivity extends AppCompatActivity {
     private Switch autoReplySwitch;
+    private RecyclerView defaultAppsRecyclerView;
     private RecyclerView appSettingsRecyclerView;
-    private AppSettingsAdapter adapter;
+    private AppSettingsAdapter defaultAppsAdapter;
+    private AppSettingsAdapter otherAppsAdapter;
     private SharedPreferences prefs;
     private AppDatabase database;
     private ExecutorService executorService;
+
+    // Package name for default app
+    private static final String DEFAULT_APP = "com.whatsapp.w4b"; // WhatsApp Business
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,8 +44,14 @@ public class AutoReplySettingsActivity extends AppCompatActivity implements AppS
         loadAppSettings();
     }
 
+    private void setupToolbar() {
+        androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        toolbar.setNavigationOnClickListener(v -> onBackPressed());
+    }
+
     private void setupViews() {
-        // Setup global auto-reply switch
+        setupToolbar();
         autoReplySwitch = findViewById(R.id.switch_auto_reply);
         
         // Enable auto-reply by default if not set
@@ -56,38 +67,54 @@ public class AutoReplySettingsActivity extends AppCompatActivity implements AppS
                 Toast.LENGTH_SHORT).show();
         });
 
-        // Setup RecyclerView
+        // Setup RecyclerViews
+        defaultAppsRecyclerView = findViewById(R.id.recycler_default_apps);
+        defaultAppsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        defaultAppsAdapter = new AppSettingsAdapter((setting, enabled) -> onAppSettingChanged(setting, enabled));
+        defaultAppsRecyclerView.setAdapter(defaultAppsAdapter);
+
         appSettingsRecyclerView = findViewById(R.id.recycler_app_settings);
         appSettingsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new AppSettingsAdapter(this);
-        appSettingsRecyclerView.setAdapter(adapter);
+        otherAppsAdapter = new AppSettingsAdapter((setting, enabled) -> onAppSettingChanged(setting, enabled));
+        appSettingsRecyclerView.setAdapter(otherAppsAdapter);
     }
 
     private void loadAppSettings() {
         executorService.execute(() -> {
-            // Get supported messaging apps
-            List<AppSettingEntity> appSettings = getMessagingApps();
-            
-            // Load saved settings from database
-            for (AppSettingEntity setting : appSettings) {
+            List<AppSettingEntity> allApps = getMessagingApps();
+            List<AppSettingEntity> defaultApps = new ArrayList<>();
+            List<AppSettingEntity> otherApps = new ArrayList<>();
+
+            // Split apps into default and other categories
+            for (AppSettingEntity setting : allApps) {
                 AppSettingEntity savedSetting = database.appSettingDao()
                     .getAppSetting(setting.getPackageName());
                 
                 if (savedSetting != null) {
                     setting.setAutoReplyEnabled(savedSetting.isAutoReplyEnabled());
                 } else {
-                    // Enable WhatsApp by default when first installing
-                    if (setting.getPackageName().contains("whatsapp")) {
+                    // Enable WhatsApp Business by default
+                    if (setting.getPackageName().equals(DEFAULT_APP)) {
                         setting.setAutoReplyEnabled(true);
                         database.appSettingDao().insert(setting);
                     } else {
                         setting.setAutoReplyEnabled(false);
                     }
                 }
+
+                // Add to appropriate list
+                if (setting.getPackageName().equals(DEFAULT_APP)) {
+                    defaultApps.add(setting);
+                } else {
+                    otherApps.add(setting);
+                }
             }
 
             // Update UI on main thread
-            runOnUiThread(() -> adapter.setAppSettings(appSettings));
+            runOnUiThread(() -> {
+                defaultAppsAdapter.setAppSettings(defaultApps);
+                otherAppsAdapter.setAppSettings(otherApps);
+            });
         });
     }
 
@@ -136,8 +163,7 @@ public class AutoReplySettingsActivity extends AppCompatActivity implements AppS
         return apps;
     }
 
-    @Override
-    public void onAppSettingChanged(AppSettingEntity setting, boolean enabled) {
+    private void onAppSettingChanged(AppSettingEntity setting, boolean enabled) {
         executorService.execute(() -> {
             setting.setAutoReplyEnabled(enabled);
             database.appSettingDao().insert(setting);

@@ -16,6 +16,7 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import com.example.whatsuit.data.AppDatabase;
+import com.example.whatsuit.data.KeywordActionEntity;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.service.GeminiService;
@@ -31,6 +32,7 @@ import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 
+import java.io.File;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -302,15 +304,15 @@ long id;
     }
 
     private String generateThreadId(String packageName, String title) {
-        // For WhatsApp, use the phone number as thread ID
+        // For WhatsApp, use exact 11-digit phone number as thread ID
         if (packageName.contains("whatsapp") && title != null) {
-            String phoneNumber = title.replaceAll("[^0-9+]", "");
-            if (!phoneNumber.isEmpty()) {
+            String phoneNumber = title.replaceAll("[^0-9]", "");
+            if (phoneNumber.length() == 11) {
                 return packageName + "_" + phoneNumber;
             }
         }
         
-        // For other apps, use package name + sanitized title
+        // For other apps or when no valid phone number, use package name + sanitized title
         return packageName + "_" + (title != null ? title.replaceAll("[^a-zA-Z0-9]", "") : "unknown");
     }
 
@@ -337,13 +339,21 @@ long id;
                         CoroutineStart.DEFAULT,
                         (scope, continuation) -> {
                             try {
-                                // Initialize if needed
-                                Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                                    return geminiService.initialize(cont);
-                                });
-                                Log.d(TAG, "Gemini initialized for auto-reply");
-                                // Generate and send reply
-                                generateAndSendReply(notificationEntity, action);
+                                // Check for keyword match first
+                                KeywordActionEntity keywordAction = database.keywordActionDao()
+                                    .findMatchingKeyword(notificationEntity.getContent());
+                                
+                                if (keywordAction != null && keywordAction.isEnabled()) {
+                                    Log.d(TAG, "Found matching keyword action: " + keywordAction.getKeyword());
+                                    handleKeywordAction(action, keywordAction);
+                                } else {
+                                    // Fall back to Gemini response
+                                    Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
+                                        return geminiService.initialize(cont);
+                                    });
+                                    Log.d(TAG, "Gemini initialized for auto-reply");
+                                    generateAndSendReply(notificationEntity, action);
+                                }
                             } catch (Exception e) {
                                 Log.e(TAG, "Error during auto-reply", e);
                             }
@@ -353,6 +363,119 @@ long id;
                     break;
                 }
             }
+        }
+    }
+
+    private void handleKeywordAction(Notification.Action action, KeywordActionEntity keywordAction) {
+        try {
+            if (keywordAction.getActionType().equals("TEXT")) {
+                // Handle text replies directly
+                sendReply(action, keywordAction.getActionContent());
+                return;
+            }
+
+            File mediaFile = new File(keywordAction.getActionContent());
+            if (!mediaFile.exists()) {
+                Log.e(TAG, "Media file not found: " + keywordAction.getActionContent());
+                return;
+            }
+
+            // Determine MIME type based on file extension
+            String fileName = mediaFile.getName().toLowerCase();
+            String mimeType;
+            
+            if (keywordAction.getActionType().equals("IMAGE")) {
+                if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+                    mimeType = "image/jpeg";
+                } else if (fileName.endsWith(".png")) {
+                    mimeType = "image/png";
+                } else if (fileName.endsWith(".gif")) {
+                    mimeType = "image/gif";
+                } else if (fileName.endsWith(".webp")) {
+                    mimeType = "image/webp";
+                } else {
+                    Log.e(TAG, "Unsupported image format: " + fileName);
+                    return;
+                }
+            } else if (keywordAction.getActionType().equals("VIDEO")) {
+                if (fileName.endsWith(".mp4")) {
+                    mimeType = "video/mp4";
+                } else if (fileName.endsWith(".3gp")) {
+                    mimeType = "video/3gpp";
+                } else if (fileName.endsWith(".webm")) {
+                    mimeType = "video/webm";
+                } else {
+                    Log.e(TAG, "Unsupported video format: " + fileName);
+                    return;
+                }
+            } else {
+                Log.e(TAG, "Unsupported action type: " + keywordAction.getActionType());
+                return;
+            }
+
+            boolean isImage = keywordAction.getActionType().equals("IMAGE");
+            boolean isVideo = keywordAction.getActionType().equals("VIDEO");
+            
+            if (!isImage && !isVideo) {
+                Log.e(TAG, "Media type mismatch. File: " + mimeType + ", Action type: " + keywordAction.getActionType());
+                return;
+            }
+
+            Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "com.example.whatsuit.fileprovider",
+                mediaFile
+            );
+
+            // Create intent with media attachment
+            Intent intent = new Intent();
+            intent.setClipData(android.content.ClipData.newRawUri("", contentUri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            
+            // Add media type to intent
+            intent.setType(mimeType);
+            
+            // Grant permissions to WhatsApp
+            grantUriPermission("com.whatsapp", contentUri, 
+                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            grantUriPermission("com.whatsapp.w4b", contentUri, 
+                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+            // Add to remote input
+            RemoteInput[] remoteInputs = action.getRemoteInputs();
+            if (remoteInputs != null && remoteInputs.length > 0) {
+                // Create a special WhatsApp-style bundle
+                Bundle whatsappBundle = new Bundle();
+                whatsappBundle.putParcelable("android.intent.extra.STREAM", contentUri);
+                whatsappBundle.putString("android.intent.extra.MIME_TYPE", mimeType);
+                whatsappBundle.putBoolean("force_attach_media", true);
+                
+                // Create the media intent
+                Intent mediaIntent = new Intent();
+                mediaIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                mediaIntent.putExtras(whatsappBundle);
+                mediaIntent.setClipData(android.content.ClipData.newRawUri("", contentUri));
+                mediaIntent.setType(mimeType);
+                
+                // Create a wrapper bundle that includes both the media and remote input
+                Bundle wrapperBundle = new Bundle();
+                wrapperBundle.putParcelable(remoteInputs[0].getResultKey(), contentUri);
+                wrapperBundle.putParcelable("media_contents", whatsappBundle);
+                
+                // Add results to intent
+                RemoteInput.addResultsToIntent(remoteInputs, mediaIntent, wrapperBundle);
+                
+                try {
+                    action.actionIntent.send(this, 0, mediaIntent);
+                    Log.d(TAG, "Successfully sent WhatsApp media reply: " + keywordAction.getActionContent());
+                } catch (PendingIntent.CanceledException e) {
+                    Log.e(TAG, "Failed to send WhatsApp media reply", e);
+                }
+            } else {
+                Log.e(TAG, "No remote inputs available for reply action");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to send media reply: " + e.getMessage(), e);
         }
     }
 

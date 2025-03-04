@@ -9,6 +9,47 @@ import androidx.room.*
  */
 @Dao
 interface GeminiDao {
+    // New enhanced conversation history queries
+    @Query("""
+        WITH RECURSIVE ConversationThread AS (
+            -- Get initial notification
+            SELECT n.id, n.conversationId, n.timestamp
+            FROM notifications n
+            WHERE n.id = :notificationId
+            
+            UNION ALL
+            
+            -- Get related notifications in same conversation
+            SELECT n.id, n.conversationId, n.timestamp
+            FROM notifications n
+            INNER JOIN ConversationThread ct ON n.conversationId = ct.conversationId
+            WHERE n.timestamp < ct.timestamp
+        )
+        SELECT ch.* 
+        FROM conversation_history ch
+        INNER JOIN ConversationThread ct ON ch.notificationId = ct.id
+        ORDER BY ch.timestamp DESC
+        LIMIT :limit
+    """)
+    suspend fun getThreadedConversationHistory(
+        notificationId: Long,
+        limit: Int
+    ): List<ConversationHistory>
+
+    @Query("""
+        SELECT ch.* FROM conversation_history ch
+        INNER JOIN notifications n ON n.id = ch.notificationId
+        WHERE n.conversationId = (
+            SELECT conversationId FROM notifications WHERE id = :notificationId
+        )
+        ORDER BY ch.timestamp DESC
+        LIMIT :limit
+    """)
+    suspend fun getConversationContextHistory(
+        notificationId: Long,
+        limit: Int
+    ): List<ConversationHistory>
+
     // GeminiConfig operations
     @Query("SELECT * FROM gemini_config WHERE id = 1")
     suspend fun getConfig(): GeminiConfig?

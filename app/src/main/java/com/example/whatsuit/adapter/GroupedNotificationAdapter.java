@@ -147,8 +147,14 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
 
     private void toggleAutoReply(NotificationEntity notification) {
         ExtractedInfo info = extractIdentifierInfo(notification);
-        autoReplyManager.toggleAutoReply(notification.getPackageName(), info.phoneNumber, info.titlePrefix, 
-            isDisabled -> notifyDataSetChanged());
+        autoReplyManager.toggleAutoReply(
+            notification.getPackageName(), 
+            info.phoneNumber, 
+            info.titlePrefix, 
+            isDisabled -> {
+                // Use main handler to post UI updates
+                mainHandler.post(() -> notifyDataSetChanged());
+            });
     }
 
     private void updateAutoReplyStatusAsync(NotificationViewHolder holder, NotificationEntity notification) {
@@ -190,14 +196,23 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
         String titlePrefix = "";
         
         if (notification.getPackageName().contains("whatsapp") && 
-            notification.getContent() != null && 
-            notification.getContent().matches(".*[0-9+].*")) {
-            String content = notification.getContent();
-            String extracted = content.replaceAll("[^0-9+\\-]", "");
-            phoneNumber = extracted.replaceAll("[^0-9]", "");
-        } else if (notification.getTitle() != null && !notification.getTitle().isEmpty()) {
-            titlePrefix = notification.getTitle().substring(0, 
-                Math.min(5, notification.getTitle().length()));
+            notification.getTitle() != null && 
+            notification.getTitle().matches(".*[0-9+].*")) {
+            try {
+                String content = notification.getTitle();
+                String extracted = content.replaceAll("[^0-9+\\-]", "");
+                String fullNumber = extracted.replaceAll("[^0-9]", "");
+                // Take first 11 digits if available, otherwise take all digits
+                phoneNumber = fullNumber.length() >= 11 ? 
+                    fullNumber.substring(0, 11) : fullNumber;
+            } catch (Exception e) {
+                // Fallback to title prefix if number extraction fails
+                titlePrefix = notification.getTitle() != null && notification.getTitle().length() >= 5 ?
+                    notification.getTitle().substring(0, 5) : notification.getTitle();
+            }
+        } else if (notification.getTitle() != null) {
+            titlePrefix = notification.getTitle().length() >= 5 ?
+                notification.getTitle().substring(0, 5) : notification.getTitle();
         }
         
         return new ExtractedInfo(phoneNumber, titlePrefix);
@@ -298,19 +313,20 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             notification.getTitle().matches(".*[0-9+].*")) {
             // Extract and clean phone number from the title
             String extracted = notification.getTitle().replaceAll("[^0-9+\\-]", "");
-            identifier = extracted.replaceAll("[^0-9]", "");
-            // Only create phone number group if we have 11 digits
-            if (identifier.length() == 11) {
+            String fullNumber = extracted.replaceAll("[^0-9]", "");
+            // Use first 11 digits as identifier if available
+            if (fullNumber.length() >= 11) {
+                identifier = fullNumber.substring(0, 11);
                 isPhoneNumberGroup = true;
             } else {
-                // Fallback to title prefix if not a valid phone number
+                // Fallback to title prefix if not enough digits
                 identifier = notification.getTitle().substring(0, 
                     Math.min(5, notification.getTitle().length()));
             }
         } else {
-            // Use title prefix for non-phone number notifications
+            // Use first 5 characters of title for non-phone number notifications
             identifier = notification.getTitle().substring(0, 
-                Math.min(10, notification.getTitle().length()));
+                Math.min(5, notification.getTitle().length()));
         }
 
         return new GroupKey(notification.getPackageName(), identifier, isPhoneNumberGroup);

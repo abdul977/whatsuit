@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.app.DatePickerDialog;
+import android.widget.ImageButton;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
@@ -15,6 +16,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -24,6 +26,7 @@ import android.view.ViewTreeObserver;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RadioGroup;
@@ -45,6 +48,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
 import com.example.whatsuit.data.ConversationHistory;
+import com.example.whatsuit.service.GeminiService;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistoryDao;
@@ -351,6 +355,9 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
                 .setPositiveButton("Close", null)
+                .setNegativeButton("Analyze", (d, which) -> {
+                    showAnalysisDialog(notification);
+                })
                 .setNeutralButton("Copy", (d, which) -> {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     ClipData clip = ClipData.newPlainText("Conversation History", historyView.getText().toString());
@@ -632,8 +639,151 @@ public class MainActivity extends AppCompatActivity {
         Log.d("MainActivity", "Toggled notification listener service");
     }
 
+    private void showAnalysisDialog(NotificationEntity notification) {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_conversation_analysis, null);
+        TextView nextStepsView = dialogView.findViewById(R.id.analysisNextSteps);
+        TextView followupView = dialogView.findViewById(R.id.analysisFollowup);
+        TextView negotiationView = dialogView.findViewById(R.id.analysisNegotiation);
+        TextView suggestedReplyView = dialogView.findViewById(R.id.analysisSuggestedReply);
+        TextView timestampView = dialogView.findViewById(R.id.analysisTimestamp);
+        Button reAnalyzeButton = dialogView.findViewById(R.id.reAnalyzeButton);
+        ImageButton copyButton = dialogView.findViewById(R.id.copyButton);
+
+        // Handle copying analysis
+        copyButton.setOnClickListener(v -> {
+            StringBuilder fullAnalysis = new StringBuilder();
+            fullAnalysis.append("Next Steps:\n").append(nextStepsView.getText()).append("\n\n");
+            fullAnalysis.append("Follow-up Actions:\n").append(followupView.getText()).append("\n\n");
+            fullAnalysis.append("Negotiation Points:\n").append(negotiationView.getText()).append("\n\n");
+            fullAnalysis.append("Suggested Reply:\n").append(suggestedReplyView.getText());
+
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("Analysis", fullAnalysis.toString());
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(MainActivity.this, "Analysis copied to clipboard", Toast.LENGTH_SHORT).show();
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
+                .setPositiveButton("Close", null)
+                .create();
+
+        // Set initial loading state
+        nextStepsView.setText("Loading analysis...");
+        followupView.setText("");
+        negotiationView.setText("");
+        timestampView.setText("");
+
+        // Function to update analysis UI
+        Runnable updateAnalysis = () -> {
+            // Use background thread for database operation
+            new Thread(() -> {
+                try {
+                    final ConversationHistory history = AppDatabase.getDatabase(this)
+                        .getConversationHistoryDao()
+                        .getLatestHistoryForConversationSync(notification.getConversationId());
+                    
+                    // Update UI on main thread
+                    runOnUiThread(() -> {
+                        if (history != null) {
+                            String analysis = history.getAnalysis();
+                            if (analysis != null) {
+                                String[] sections = analysis.split("\\d\\.");
+                                if (sections.length >= 5) {
+                                    // Format the text by replacing dashes/asterisks with bullet points
+                                    nextStepsView.setText(formatAnalysisSection(sections[1]));
+                                    followupView.setText(formatAnalysisSection(sections[2]));
+                                    negotiationView.setText(formatAnalysisSection(sections[3]));
+                                    String suggestedReply = formatAnalysisSection(sections[4]);
+                                    suggestedReplyView.setText(suggestedReply);
+                                } else {
+                                    nextStepsView.setText(analysis);
+                                    followupView.setText("");
+                                    negotiationView.setText("");
+                                }
+                                Long analysisTimestamp = history.getAnalysisTimestamp();
+                                if (analysisTimestamp != null) {
+                                    String timestamp = DateUtils.getRelativeTimeSpanString(
+                                        analysisTimestamp,
+                                        System.currentTimeMillis(),
+                                        DateUtils.MINUTE_IN_MILLIS
+                                    ).toString();
+                                    timestampView.setText("Last analyzed: " + timestamp);
+                                }
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e("MainActivity", "Error loading analysis", e);
+                    runOnUiThread(() -> {
+                        nextStepsView.setText("Error loading analysis");
+                    });
+                }
+            }).start();
+        };
+
+        // Initial analysis load and check
+        new Thread(() -> {
+            try {
+                final ConversationHistory history = AppDatabase.getDatabase(this)
+                    .getConversationHistoryDao()
+                    .getLatestHistoryForConversationSync(notification.getConversationId());
+                
+                runOnUiThread(() -> {
+                    if (history != null) {
+                        if (history.getAnalysis() == null) {
+                            performAnalysis(notification.getConversationId(), updateAnalysis);
+                        } else {
+                            updateAnalysis.run();
+                        }
+                    } else {
+                        nextStepsView.setText("No conversation history available");
+                    }
+                });
+            } catch (Exception e) {
+                Log.e("MainActivity", "Error checking conversation history", e);
+                runOnUiThread(() -> {
+                    nextStepsView.setText("Error loading conversation history");
+                });
+            }
+        }).start();
+
+        // Re-analyze button click handler
+        reAnalyzeButton.setOnClickListener(v -> 
+            performAnalysis(notification.getConversationId(), updateAnalysis));
+
+        dialog.show();
+    }
+
+    private void performAnalysis(String conversationId, Runnable onComplete) {
+        new GeminiService(this).analyzeConversation(
+            conversationId,
+            new GeminiService.ResponseCallback() {
+                @Override
+                public void onPartialResponse(String text) {}
+
+                @Override
+                public void onComplete(String fullResponse) {
+                    runOnUiThread(() -> {
+                        onComplete.run();
+                        Toast.makeText(MainActivity.this, 
+                            "Analysis complete", Toast.LENGTH_SHORT).show();
+                    });
+                }
+
+                @Override
+                public void onError(Throwable error) {
+                    runOnUiThread(() -> 
+                        Toast.makeText(MainActivity.this,
+                            "Analysis failed: " + error.getMessage(),
+                            Toast.LENGTH_LONG).show());
+                }
+            }
+        );
+    }
+
     private void showOptionsMenu() {
-        String[] options = {"Clear All", "Auto-Reply Settings", "Gemini Configuration", "Settings", "About"};
+        String[] options = {"Clear All", "Auto-Reply Settings", "Keyword Actions", "Gemini Configuration", "Settings", "About"};
         new AlertDialog.Builder(this)
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -644,12 +794,15 @@ public class MainActivity extends AppCompatActivity {
                             startActivity(new Intent(this, AutoReplySettingsActivity.class));
                             break;
                         case 2:
-                            startActivity(new Intent(this, GeminiConfigActivity.class));
+                            startActivity(new Intent(this, KeywordActionsActivity.class));
                             break;
                         case 3:
-                            // TODO: Open general settings
+                            startActivity(new Intent(this, GeminiConfigActivity.class));
                             break;
                         case 4:
+                            // TODO: Open general settings
+                            break;
+                        case 5:
                             showAboutDialog();
                             break;
                     }
@@ -674,6 +827,17 @@ public class MainActivity extends AppCompatActivity {
                 .setMessage("Notification History App\nVersion 1.0")
                 .setPositiveButton("OK", null)
                 .show();
+    }
+
+    private String formatAnalysisSection(String text) {
+        if (text == null) return "";
+        return text.trim()
+            .replaceAll("(?m)^[-*]\\s*", "")  // Remove bullet points
+            .replaceAll("(?m)^\\s+", "")      // Remove leading whitespace
+            .replaceAll("(?m)^", "\u2022 ")   // Add consistent bullet points
+            .replaceAll("\n{3,}", "\n\n")     // Normalize multiple line breaks
+            .replaceAll("(?m)^\\s*([A-Z][^.!?:]*(?:[.!?:]\\s*)?)$", "\n$1\n") // Add spacing around headings
+            .trim();
     }
 
     @Override

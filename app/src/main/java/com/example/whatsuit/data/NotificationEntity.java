@@ -2,9 +2,16 @@ package com.example.whatsuit.data;
 
 import androidx.room.Entity;
 import androidx.room.Ignore;
+import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(tableName = "notifications")
+@Entity(tableName = "notifications",
+        indices = {
+                @Index(value = {"packageName", "title", "timestamp"}),
+                @Index(value = {"timestamp"}),
+                @Index(value = {"packageName"}),
+                @Index(value = {"conversationId"})
+        })
 public class NotificationEntity {
     @PrimaryKey(autoGenerate = true)
     private long id;
@@ -26,6 +33,11 @@ public class NotificationEntity {
     @Ignore
     private int group_count;
 
+    public NotificationEntity() {
+        // Required no-args constructor for Room
+    }
+
+    @Ignore
     public NotificationEntity(String packageName, String appName, String title, String content,
                             String conversationId, long timestamp, String icon) {
         this.packageName = packageName;

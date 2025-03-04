@@ -82,36 +82,43 @@ class ConversationHistoryAdapter(
                 messageInput.isEnabled = false
             }
 
-            AlertDialog.Builder(context)
+            val dialog = AlertDialog.Builder(context)
                 .setTitle(R.string.edit_conversation)
                 .setView(dialogView)
-                .setPositiveButton(R.string.save) { dialog, _ ->
-                    val newMessage = messageInput.text?.toString()
-                    val newResponse = responseInput.text?.toString()
+                .create()
 
-                    val validationResult = conversation.validateEdit(
-                        newMessage = if (isMessage) newMessage else conversation.message,
-                        newResponse = if (isMessage) conversation.response else newResponse
+            // Use buttons from the dialog layout
+            dialogView.findViewById<View>(R.id.saveButton).setOnClickListener {
+                val newMessage = messageInput.text?.toString()
+                val newResponse = responseInput.text?.toString()
+
+                val validationResult = conversation.validateEdit(
+                    newMessage = if (isMessage) newMessage else conversation.message,
+                    newResponse = if (isMessage) conversation.response else newResponse
+                )
+
+                if (validationResult.first) {
+                    onEdit(
+                        conversation,
+                        if (isMessage) newMessage!! else conversation.message,
+                        if (isMessage) conversation.response else newResponse!!
                     )
-
-                    if (validationResult.first) {
-                        onEdit(
-                            conversation,
-                            if (isMessage) newMessage!! else conversation.message,
-                            if (isMessage) conversation.response else newResponse!!
-                        )
-                        dialog.dismiss()
-                    } else {
-                        dialog.dismiss()
-                        // Show error message
-                        AlertDialog.Builder(context)
-                            .setMessage(validationResult.second)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show()
-                    }
+                    dialog.dismiss()
+                } else {
+                    dialog.dismiss()
+                    // Show error message
+                    AlertDialog.Builder(context)
+                        .setMessage(validationResult.second)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
                 }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
+            }
+
+            dialogView.findViewById<View>(R.id.cancelButton).setOnClickListener {
+                dialog.dismiss()
+            }
+
+            dialog.show()
         }
     }
 }

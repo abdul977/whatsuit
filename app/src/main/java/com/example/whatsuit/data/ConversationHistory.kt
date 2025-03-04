@@ -33,6 +33,16 @@ data class ConversationHistory(
     val isModified: Boolean = false,
 
     /**
+     * Analysis of the conversation provided by Gemini
+     */
+    val analysis: String? = null,
+
+    /**
+     * Timestamp of when the analysis was last generated
+     */
+    val analysisTimestamp: Long? = null,
+
+    /**
      * Unique identifier for the conversation thread
      */
     val conversationId: String,

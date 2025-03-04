@@ -9,6 +9,8 @@ import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 import com.example.whatsuit.data.migrations.Migration7To8;
 import com.example.whatsuit.data.migrations.Migration8To9;
+import com.example.whatsuit.data.migrations.Migration9To10;
+import com.example.whatsuit.data.migrations.Migration10To11;
 
 @Database(
     entities = {
@@ -16,9 +18,10 @@ import com.example.whatsuit.data.migrations.Migration8To9;
         GeminiConfig.class,
         ConversationHistory.class,
         PromptTemplate.class,
-        AppSettingEntity.class
+        AppSettingEntity.class,
+        KeywordActionEntity.class
     },
-    version = 9,
+    version = 11,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -28,6 +31,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract GeminiDao geminiDao();
     public abstract AppSettingDao appSettingDao();
     public abstract ConversationHistoryDao conversationHistoryDao();
+    public abstract KeywordActionDao keywordActionDao();
 
     static final Migration MIGRATION_1_2 = new Migration(1, 2) {
         @Override
@@ -202,10 +206,22 @@ public abstract class AppDatabase extends RoomDatabase {
                             AppDatabase.class,
                             "notification_database"
                     )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, new Migration7To8(), new Migration8To9())
-                    .fallbackToDestructiveMigration()  // Allow database recreation if migration fails
+                    .addMigrations(
+                            MIGRATION_1_2,
+                            MIGRATION_2_3,
+                            MIGRATION_3_4,
+                            MIGRATION_4_5,
+                            MIGRATION_5_6,
+                            MIGRATION_6_7,
+                            new Migration7To8(),
+                            new Migration8To9(),
+                            new Migration9To10(),
+                            new Migration10To11()
+                    )
+                    .fallbackToDestructiveMigration()
                     .build();
                 }
+                
             }
         }
         return INSTANCE;

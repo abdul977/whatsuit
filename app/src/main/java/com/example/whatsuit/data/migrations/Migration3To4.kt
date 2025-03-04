@@ -66,7 +66,7 @@ class Migration3To4 : Migration(3, 4) {
                 ch.message,
                 ch.response,
                 ch.timestamp,
-                0
+                0 
             FROM conversation_history ch
             LEFT JOIN notifications n ON ch.notificationId = n.id
         """)

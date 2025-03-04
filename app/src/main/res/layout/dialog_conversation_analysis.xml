@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp"
+    android:background="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:id="@+id/analysisTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_toStartOf="@id/copyButton"
+                android:text="Conversation Analysis"
+                android:textStyle="bold"
+                android:textSize="24sp"
+                android:textColor="@color/md_theme_primary"
+                android:fontFamily="@font/roboto_medium"/>
+
+            <ImageButton
+                android:id="@+id/copyButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_alignParentEnd="true"
+                android:src="@drawable/ic_copy"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:padding="12dp"
+                android:contentDescription="Copy analysis"
+                android:tint="@color/md_theme_primary"/>
+        </RelativeLayout>
+
+        <TextView
+            android:id="@+id/analysisTimestamp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="?android:textColorSecondary"
+            android:layout_marginBottom="24dp"
+            android:fontFamily="@font/roboto"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Next Steps"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/md_theme_primary"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="@font/roboto_medium"/>
+
+        <TextView
+            android:id="@+id/analysisNextSteps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/md_theme_onBackground"
+            android:lineSpacingMultiplier="1.4"
+            android:layout_marginBottom="32dp"
+            android:fontFamily="@font/roboto"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Follow-up Actions"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/md_theme_primary"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="@font/roboto_medium"/>
+
+        <TextView
+            android:id="@+id/analysisFollowup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/md_theme_onBackground"
+            android:lineSpacingMultiplier="1.4"
+            android:layout_marginBottom="32dp"
+            android:fontFamily="@font/roboto"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Negotiation Points"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/md_theme_primary"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="@font/roboto_medium"/>
+
+        <TextView
+            android:id="@+id/analysisNegotiation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/md_theme_onBackground"
+            android:lineSpacingMultiplier="1.4"
+            android:layout_marginBottom="32dp"
+            android:fontFamily="@font/roboto"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Suggested Reply"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/md_theme_primary"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="@font/roboto_medium"/>
+
+        <TextView
+            android:id="@+id/analysisSuggestedReply"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/md_theme_secondary"
+            android:textStyle="italic"
+            android:lineSpacingMultiplier="1.4"
+            android:layout_marginBottom="24dp"
+            android:fontFamily="@font/roboto"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reAnalyzeButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Re-analyze"
+            android:layout_gravity="end"
+            android:textAllCaps="false"
+            app:cornerRadius="20dp"/>
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>

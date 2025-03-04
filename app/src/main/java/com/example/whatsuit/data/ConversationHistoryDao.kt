@@ -87,4 +87,27 @@ interface ConversationHistoryDao {
     
     @Query("SELECT COUNT(*) FROM conversation_history WHERE notificationId = :notificationId")
     suspend fun getHistoryCount(notificationId: Long): Int
+
+    /**
+     * Gets all history entries for a given conversation ID
+     */
+    @Query("SELECT * FROM conversation_history WHERE conversationId = :conversationId ORDER BY timestamp DESC")
+    fun getHistoryForConversationSync(conversationId: String): List<ConversationHistory>
+
+    /**
+     * Gets the latest history entry for a conversation
+     */
+    @Query("SELECT * FROM conversation_history WHERE conversationId = :conversationId ORDER BY timestamp DESC LIMIT 1")
+    fun getLatestHistoryForConversationSync(conversationId: String): ConversationHistory?
+
+    /**
+     * Updates the analysis for a conversation history entry
+     */
+    @Query("""
+        UPDATE conversation_history 
+        SET analysis = :analysis,
+            analysisTimestamp = :timestamp
+        WHERE id = :id
+    """)
+    suspend fun updateAnalysis(id: Long, analysis: String?, timestamp: Long?)
 }

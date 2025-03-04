@@ -26,7 +26,9 @@
             android:id="@+id/contentTextView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceBodyMedium"/>
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:maxLines="3"
+            android:ellipsize="end"/>
 
     </LinearLayout>
 
