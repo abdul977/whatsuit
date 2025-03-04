@@ -1,5 +1,8 @@
 {
     "java.configuration.updateBuildConfiguration": "interactive",
     "augment.nextEdit.enableGlobalBackgroundSuggestions": true,
-    "augment.nextEdit.showDiffInHover": true
+    "augment.nextEdit.showDiffInHover": true,
+    "python.analysis.extraPaths": [
+        "/home/codespace/.vscode-remote/extensions/continue.continue-0.1.3"
+    ]
 }
