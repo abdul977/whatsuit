@@ -20,6 +20,7 @@ import java.util.concurrent.Executors;
 
 public class AutoReplySettingsActivity extends AppCompatActivity {
     private Switch autoReplySwitch;
+    private Switch autoReplyGroupsSwitch;
     private RecyclerView defaultAppsRecyclerView;
     private RecyclerView appSettingsRecyclerView;
     private AppSettingsAdapter defaultAppsAdapter;
@@ -53,6 +54,7 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
     private void setupViews() {
         setupToolbar();
         autoReplySwitch = findViewById(R.id.switch_auto_reply);
+        autoReplyGroupsSwitch = findViewById(R.id.switch_auto_reply_groups);
         
         // Enable auto-reply by default if not set
         if (!prefs.contains("auto_reply_enabled")) {
@@ -64,6 +66,19 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
             prefs.edit().putBoolean("auto_reply_enabled", isChecked).apply();
             Toast.makeText(this, 
                 isChecked ? "Auto-reply enabled" : "Auto-reply disabled", 
+                Toast.LENGTH_SHORT).show();
+        });
+
+        // Enable auto-reply for groups by default if not set
+        if (!prefs.contains("auto_reply_groups_enabled")) {
+            prefs.edit().putBoolean("auto_reply_groups_enabled", true).apply();
+        }
+        autoReplyGroupsSwitch.setChecked(prefs.getBoolean("auto_reply_groups_enabled", true));
+        
+        autoReplyGroupsSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("auto_reply_groups_enabled", isChecked).apply();
+            Toast.makeText(this, 
+                isChecked ? "Auto-reply for groups enabled" : "Auto-reply for groups disabled", 
                 Toast.LENGTH_SHORT).show();
         });
 
@@ -92,13 +107,16 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
                 
                 if (savedSetting != null) {
                     setting.setAutoReplyEnabled(savedSetting.isAutoReplyEnabled());
+                    setting.setAutoReplyGroupsEnabled(savedSetting.isAutoReplyGroupsEnabled());
                 } else {
                     // Enable WhatsApp Business by default
                     if (setting.getPackageName().equals(DEFAULT_APP)) {
                         setting.setAutoReplyEnabled(true);
+                        setting.setAutoReplyGroupsEnabled(true);
                         database.appSettingDao().insert(setting);
                     } else {
                         setting.setAutoReplyEnabled(false);
+                        setting.setAutoReplyGroupsEnabled(false);
                     }
                 }
 
@@ -135,8 +153,7 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
             "com.linkedin.android",
             "org.thoughtcrime.securesms",
             "com.facebook.pages.app",
-            "com.viber.voip"
-,
+            "com.viber.voip",
             // Additional WhatsApp variants
             "com.gbwhatsapp",
             "com.whatsapp.plus",
@@ -154,7 +171,7 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
             try {
                 ApplicationInfo info = pm.getApplicationInfo(packageName, 0);
                 String appName = pm.getApplicationLabel(info).toString();
-                apps.add(new AppSettingEntity(packageName, appName, false));
+                apps.add(new AppSettingEntity(packageName, appName, false, false));
             } catch (PackageManager.NameNotFoundException ignored) {
                 // App is not installed, skip it
             }

@@ -219,9 +219,12 @@ long id;
         Log.d(TAG, "Global auto-reply enabled: " + globalAutoReplyEnabled);
 
         boolean appSpecificEnabled = false;
+        boolean appSpecificGroupsEnabled = false;
         if (isMessagingApp(packageName)) {
             appSpecificEnabled = database.appSettingDao().isAutoReplyEnabled(packageName);
+            appSpecificGroupsEnabled = database.appSettingDao().isAutoReplyGroupsEnabled(packageName);
             Log.d(TAG, "App-specific auto-reply enabled for " + packageName + ": " + appSpecificEnabled);
+            Log.d(TAG, "App-specific auto-reply for groups enabled for " + packageName + ": " + appSpecificGroupsEnabled);
         }
         
         // Check basic auto-reply conditions without requiring Gemini to be initialized
@@ -258,7 +261,12 @@ long id;
                 appName, content, phoneNumber, titlePrefix, autoReplyEnabled));
             
             if (autoReplyEnabled) {
-                handleAutoReply(sbn, notificationEntity);
+                boolean isGroupMessage = isGroupMessage(sbn);
+                if (isGroupMessage && appSpecificGroupsEnabled) {
+                    handleAutoReply(sbn, notificationEntity);
+                } else if (!isGroupMessage) {
+                    handleAutoReply(sbn, notificationEntity);
+                }
             }
         }
 
