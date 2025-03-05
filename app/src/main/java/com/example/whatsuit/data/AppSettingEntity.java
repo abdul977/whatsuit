@@ -12,11 +12,13 @@ public class AppSettingEntity {
     
     private String appName;
     private boolean autoReplyEnabled;
+    private boolean autoReplyGroupsEnabled;
 
-    public AppSettingEntity(@NonNull String packageName, String appName, boolean autoReplyEnabled) {
+    public AppSettingEntity(@NonNull String packageName, String appName, boolean autoReplyEnabled, boolean autoReplyGroupsEnabled) {
         this.packageName = packageName;
         this.appName = appName;
         this.autoReplyEnabled = autoReplyEnabled;
+        this.autoReplyGroupsEnabled = autoReplyGroupsEnabled;
     }
 
     @NonNull
@@ -42,5 +44,13 @@ public class AppSettingEntity {
 
     public void setAutoReplyEnabled(boolean autoReplyEnabled) {
         this.autoReplyEnabled = autoReplyEnabled;
+    }
+
+    public boolean isAutoReplyGroupsEnabled() {
+        return autoReplyGroupsEnabled;
+    }
+
+    public void setAutoReplyGroupsEnabled(boolean autoReplyGroupsEnabled) {
+        this.autoReplyGroupsEnabled = autoReplyGroupsEnabled;
     }
 }

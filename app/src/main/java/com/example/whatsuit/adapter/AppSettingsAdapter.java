@@ -41,9 +41,15 @@ public class AppSettingsAdapter extends RecyclerView.Adapter<AppSettingsAdapter.
         AppSettingEntity setting = appSettings.get(position);
         holder.appNameTextView.setText(setting.getAppName());
         holder.enableSwitch.setChecked(setting.isAutoReplyEnabled());
-        
+        holder.enableGroupsSwitch.setChecked(setting.isAutoReplyGroupsEnabled());
+
         holder.enableSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             setting.setAutoReplyEnabled(isChecked);
+            listener.onAppSettingChanged(setting, isChecked);
+        });
+
+        holder.enableGroupsSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            setting.setAutoReplyGroupsEnabled(isChecked);
             listener.onAppSettingChanged(setting, isChecked);
         });
     }
@@ -56,11 +62,13 @@ public class AppSettingsAdapter extends RecyclerView.Adapter<AppSettingsAdapter.
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView appNameTextView;
         Switch enableSwitch;
+        Switch enableGroupsSwitch;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
             appNameTextView = itemView.findViewById(R.id.text_app_name);
             enableSwitch = itemView.findViewById(R.id.switch_app_enable);
+            enableGroupsSwitch = itemView.findViewById(R.id.switch_app_enable_groups);
         }
     }
 }
