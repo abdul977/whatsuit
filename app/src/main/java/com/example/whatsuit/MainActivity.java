@@ -36,6 +36,7 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.core.graphics.Insets;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
@@ -87,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
     private AppBarLayout appBarLayout;
     private long startTime = 0;
     private long endTime = Long.MAX_VALUE;
+    private SearchView searchView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -209,8 +211,7 @@ public class MainActivity extends AppCompatActivity {
     private void createParticleEffect() {
         // Simple fade out animation
         ObjectAnimator fadeOut = ObjectAnimator.ofFloat(splashIcon, View.ALPHA, 1f, 0f);
-        fadeOut.setDuration(700)
-;
+        fadeOut.setDuration(700);
         fadeOut.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
@@ -232,6 +233,7 @@ public class MainActivity extends AppCompatActivity {
         swipeRefresh = findViewById(R.id.swipeRefresh);
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
+        searchView = findViewById(R.id.searchView);
         
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
@@ -332,6 +334,9 @@ public class MainActivity extends AppCompatActivity {
         
         // Setup app filter
         setupAppFilter();
+        
+        // Setup search view
+        setupSearchView();
         
         // Load notifications
         loadNotifications();
@@ -537,6 +542,37 @@ public class MainActivity extends AppCompatActivity {
             }
             loadNotifications();
         });
+    }
+
+    private void setupSearchView() {
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                filterNotifications(query);
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                filterNotifications(newText);
+                return true;
+            }
+        });
+    }
+
+    private void filterNotifications(String query) {
+        if (query == null || query.isEmpty()) {
+            loadNotifications();
+        } else {
+            List<NotificationEntity> filteredList = new ArrayList<>();
+            for (NotificationEntity notification : notificationAdapter.getNotifications()) {
+                if (notification.getTitle().toLowerCase().contains(query.toLowerCase()) ||
+                    notification.getContent().toLowerCase().contains(query.toLowerCase())) {
+                    filteredList.add(notification);
+                }
+            }
+            notificationAdapter.updateNotifications(filteredList);
+        }
     }
 
     private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
