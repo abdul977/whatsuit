@@ -27,6 +27,7 @@ import java.util.Map;
 
 public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder> {
     private List<NotificationEntity> notifications = new ArrayList<>();
+    private List<NotificationEntity> allNotifications = new ArrayList<>();
 
     public NotificationAdapter() {
         setHasStableIds(true);
@@ -82,7 +83,20 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         List<NotificationEntity> oldNotifications = new ArrayList<>(notifications);
         notifications.clear();
         notifications.addAll(newNotifications);
+        allNotifications.clear();
+        allNotifications.addAll(newNotifications);
         calculateDiff(oldNotifications, newNotifications);
+    }
+
+    public void filterNotifications(String query) {
+        List<NotificationEntity> filteredList = new ArrayList<>();
+        for (NotificationEntity notification : allNotifications) {
+            if (notification.getTitle().toLowerCase().contains(query.toLowerCase()) ||
+                notification.getContent().toLowerCase().contains(query.toLowerCase())) {
+                filteredList.add(notification);
+            }
+        }
+        setNotifications(filteredList);
     }
 
     private void calculateDiff(List<NotificationEntity> oldItems, List<NotificationEntity> newItems) {
