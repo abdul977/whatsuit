@@ -594,4 +594,23 @@ long id;
             Log.d(TAG, "Service scope cancelled");
         }
     }
+
+    private boolean isGroupMessage(StatusBarNotification sbn) {
+        Bundle extras = sbn.getNotification().extras;
+
+        // Modern API detection
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            Boolean isGroup = extras.getBoolean(androidx.core.app.NotificationCompat.EXTRA_IS_GROUP_CONVERSATION);
+            if (isGroup != null) return isGroup;
+        }
+
+        // Legacy fallback checks
+        String text = extras.getString("android.text");
+        String title = extras.getString("android.title");
+
+        return title.matches(".*\\d+ messages?.*") 
+            || text.contains(":") 
+            || (extras.get("android.people") != null 
+                && ((String[]) extras.get("android.people")).length > 1);
+    }
 }
