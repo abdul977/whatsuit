@@ -26,6 +26,9 @@ public interface AppSettingDao {
     @Query("SELECT autoReplyEnabled FROM app_settings WHERE packageName = :packageName")
     boolean isAutoReplyEnabled(String packageName);
 
+    @Query("SELECT autoReplyGroupsEnabled FROM app_settings WHERE packageName = :packageName")
+    boolean isAutoReplyGroupsEnabled(String packageName);
+
     @Query("DELETE FROM app_settings WHERE packageName = :packageName")
     void delete(String packageName);
 }

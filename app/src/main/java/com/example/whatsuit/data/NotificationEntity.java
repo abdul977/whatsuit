@@ -27,11 +27,11 @@ public class NotificationEntity {
     private boolean autoReplyDisabled;
     private String conversationId;
     
-    @Ignore
-    private long group_timestamp;
+    @androidx.room.ColumnInfo(name = "group_timestamp", defaultValue = "NULL")
+    private Long groupTimestamp;
     
-    @Ignore
-    private int group_count;
+    @androidx.room.ColumnInfo(name = "group_count", defaultValue = "NULL")
+    private Integer groupCount;
 
     public NotificationEntity() {
         // Required no-args constructor for Room
@@ -86,9 +86,9 @@ public class NotificationEntity {
     public boolean isAutoReplyDisabled() { return autoReplyDisabled; }
     public void setAutoReplyDisabled(boolean autoReplyDisabled) { this.autoReplyDisabled = autoReplyDisabled; }
     
-    public long getGroupTimestamp() { return group_timestamp; }
-    public void setGroupTimestamp(long group_timestamp) { this.group_timestamp = group_timestamp; }
+    public Long getGroupTimestamp() { return groupTimestamp; }
+    public void setGroupTimestamp(Long groupTimestamp) { this.groupTimestamp = groupTimestamp; }
     
-    public int getGroupCount() { return group_count; }
-    public void setGroupCount(int group_count) { this.group_count = group_count; }
+    public Integer getGroupCount() { return groupCount; }
+    public void setGroupCount(Integer groupCount) { this.groupCount = groupCount; }
 }

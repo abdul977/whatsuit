@@ -18,7 +18,11 @@ public class AppSettingEntity {
         this.packageName = packageName;
         this.appName = appName;
         this.autoReplyEnabled = autoReplyEnabled;
+<<<<<<< Updated upstream
         this.autoReplyGroupsEnabled = autoReplyGroupsEnabled;
+=======
+        this.autoReplyGroupsEnabled = true; // Enable by default
+>>>>>>> Stashed changes
     }
 
     @NonNull

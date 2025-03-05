@@ -11,6 +11,7 @@ import com.example.whatsuit.data.migrations.Migration7To8;
 import com.example.whatsuit.data.migrations.Migration8To9;
 import com.example.whatsuit.data.migrations.Migration9To10;
 import com.example.whatsuit.data.migrations.Migration10To11;
+import com.example.whatsuit.data.migrations.Migration11To12;
 
 @Database(
     entities = {
@@ -21,7 +22,7 @@ import com.example.whatsuit.data.migrations.Migration10To11;
         AppSettingEntity.class,
         KeywordActionEntity.class
     },
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -216,7 +217,8 @@ public abstract class AppDatabase extends RoomDatabase {
                             new Migration7To8(),
                             new Migration8To9(),
                             new Migration9To10(),
-                            new Migration10To11()
+                            new Migration10To11(),
+                            new Migration11To12()
                     )
                     .fallbackToDestructiveMigration()
                     .build();

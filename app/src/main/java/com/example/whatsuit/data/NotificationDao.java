@@ -105,6 +105,7 @@ public interface NotificationDao {
     );
 
     // Smart grouping for time range with exact phone number matching for WhatsApp
+    @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("WITH GroupedNotifs AS (" +
             "  SELECT n1.*, " +
             "         MIN(n1.timestamp) as group_timestamp, " +
@@ -139,6 +140,7 @@ public interface NotificationDao {
             "SELECT * FROM GroupedNotifs ORDER BY group_timestamp DESC")
     LiveData<List<NotificationEntity>> getSmartGroupedNotificationsInRange(long startTime, long endTime);
 
+    @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("WITH GroupedNotifs AS (" +
             "  SELECT n1.*, " +
             "         MIN(n1.timestamp) as group_timestamp, " +
@@ -208,6 +210,7 @@ public interface NotificationDao {
     }
 
     // Get all notifications with smart grouping
+    @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("WITH GroupedNotifs AS (" +
             "  SELECT n1.*, " +
             "         MIN(n1.timestamp) as group_timestamp, " +
