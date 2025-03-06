@@ -54,6 +54,7 @@ import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistoryDao;
 import com.example.whatsuit.util.AutoReplyManager;
+import com.example.whatsuit.util.TimeFilterHelper;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -89,6 +90,8 @@ public class MainActivity extends AppCompatActivity {
     private long startTime = 0;
     private long endTime = Long.MAX_VALUE;
     private SearchView searchView;
+    private ImageView filterIcon;
+    private TextView dateSelectionDropdown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -234,6 +237,8 @@ public class MainActivity extends AppCompatActivity {
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
         searchView = findViewById(R.id.searchView);
+        filterIcon = findViewById(R.id.filterIcon);
+        dateSelectionDropdown = findViewById(R.id.dateSelectionDropdown);
         
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
@@ -337,6 +342,12 @@ public class MainActivity extends AppCompatActivity {
         
         // Setup search view
         setupSearchView();
+        
+        // Setup filter icon click listener
+        filterIcon.setOnClickListener(v -> showTimeFilterDialog());
+        
+        // Setup date selection dropdown click listener
+        dateSelectionDropdown.setOnClickListener(v -> showDatePickerDialog());
         
         // Load notifications
         loadNotifications();
