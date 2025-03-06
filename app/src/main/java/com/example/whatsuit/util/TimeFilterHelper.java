@@ -144,4 +144,20 @@ public class TimeFilterHelper {
             filterDialog.dismiss();
         }
     }
+    
+    public void showDatePickerDialog(final TextInputEditText dateInput) {
+        final Calendar calendar = Calendar.getInstance();
+        int year = calendar.get(Calendar.YEAR);
+        int month = calendar.get(Calendar.MONTH);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+
+        DatePickerDialog datePickerDialog = new DatePickerDialog(context,
+                (view, selectedYear, selectedMonth, selectedDay) -> {
+                    calendar.set(selectedYear, selectedMonth, selectedDay);
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                    dateInput.setText(dateFormat.format(calendar.getTime()));
+                }, year, month, day);
+
+        datePickerDialog.show();
+    }
 }
