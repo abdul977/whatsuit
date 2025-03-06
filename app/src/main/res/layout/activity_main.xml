@@ -87,6 +87,34 @@
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                     app:layout_constraintTop_toBottomOf="@id/chipGroupScroll"/>
 
+                <ImageView
+                    android:id="@+id/filterIcon"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="16dp"
+                    android:src="@drawable/ic_filter"
+                    android:contentDescription="Filter"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"/>
+
+                <TextView
+                    android:id="@+id/dateSelectionDropdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="16dp"
+                    android:text="Yesterday"
+                    android:textColor="@color/md_theme_primary"
+                    android:drawableEnd="@drawable/ic_dropdown"
+                    android:drawablePadding="4dp"
+                    android:padding="8dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:layout_constraintStart_toEndOf="@id/filterIcon"
+                    app:layout_constraintTop_toTopOf="parent"/>
+
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <com.google.android.material.appbar.MaterialToolbar
