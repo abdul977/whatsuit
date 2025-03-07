@@ -561,9 +561,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void filterNotifications(String query) {
-        if (query == null || query.isEmpty()) {
-            loadNotifications();
-        } else {
+        new Thread(() -> {
             List<NotificationEntity> filteredList = new ArrayList<>();
             for (NotificationEntity notification : notificationAdapter.getNotifications()) {
                 if (notification.getTitle().toLowerCase().contains(query.toLowerCase()) ||
@@ -571,8 +569,8 @@ public class MainActivity extends AppCompatActivity {
                     filteredList.add(notification);
                 }
             }
-            notificationAdapter.updateNotifications(filteredList);
-        }
+            runOnUiThread(() -> notificationAdapter.updateNotifications(filteredList));
+        }).start();
     }
 
     private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
