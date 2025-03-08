@@ -237,6 +237,16 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     public int getItemCount() {
         return items.size();
     }
+    
+    public List<NotificationEntity> getNotifications() {
+        List<NotificationEntity> allNotifications = new ArrayList<>();
+        for (Object item : items) {
+            if (item instanceof NotificationEntity) {
+                allNotifications.add((NotificationEntity) item);
+            }
+        }
+        return allNotifications;
+    }
 
     public void updateNotifications(List<NotificationEntity> notifications) {
         Map<GroupKey, Boolean> previousExpandedStates = new HashMap<>(expandedGroups);
