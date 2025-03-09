@@ -13,6 +13,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import androidx.room.withTransaction
 import kotlinx.coroutines.sync.withLock
+import com.example.whatsuit.data.NotificationEntity
 
 class GeminiService(private val context: Context) {
     private companion object {
@@ -165,13 +166,28 @@ class GeminiService(private val context: Context) {
             Log.d(TAG, "Retrieved Gemini config: modelName=${config.modelName}, historyLimit=${config.maxHistoryPerThread}")
             val model = generativeModel ?: throw IllegalStateException("Gemini model not initialized")
 
-            // Get the notification to access its threadId
-            val notification = database.notificationDao().getNotificationByIdSync(notificationId)
-                ?: throw IllegalStateException("Notification not found")
+            // Retry logic for getting notification
+            var notification: NotificationEntity? = null
+            repeat(3) { attempt ->
+                notification = database.notificationDao().getNotificationByIdSync(notificationId)
+                if (notification != null) {
+                    return@repeat
+                }
+                if (attempt < 2) { // Don't delay on last attempt
+                    delay(500) // Wait 500ms between attempts
+                    Log.d(TAG, "Retrying notification retrieval attempt ${attempt + 2}")
+                }
+            }
+            
+            // If still null after retries, throw exception
+            notification ?: throw IllegalStateException("Notification not found after retries")
+            
+            // Get notification data
+            val safeNotification = notification!!  // Safe cast since we checked for null above
             
             // Get all historical conversations for this thread
             val conversationHistory = database.conversationHistoryDao()
-                .getHistoryForConversationSync(notification.conversationId)
+                .getHistoryForConversationSync(safeNotification.conversationId)
             
             // Get enhanced conversation context including participants
             val contextData = conversationManager.getConversationContext(notificationId)
@@ -242,11 +258,11 @@ class GeminiService(private val context: Context) {
             // Save conversation history
             try {
                 withContext(Dispatchers.IO) {
-                    val notification = database.notificationDao().getNotificationByIdSync(notificationId)
-                    if (notification != null) {
-                        val conversationHistory = ConversationHistory(
+                    val savedNotification = database.notificationDao().getNotificationByIdSync(notificationId)
+                    if (savedNotification != null) {
+                        val newHistory = ConversationHistory(
                             notificationId = notificationId,
-                            conversationId = notification.conversationId ?: "",
+                            conversationId = savedNotification.conversationId ?: "",
                             message = message,
                             response = finalResponse,
                             timestamp = System.currentTimeMillis()
@@ -254,7 +270,7 @@ class GeminiService(private val context: Context) {
                         
                         database.runInTransaction {
                             runBlocking {
-                                database.conversationHistoryDao().insert(conversationHistory)
+                                database.conversationHistoryDao().insert(newHistory)
                                 Log.d(HISTORY_TAG, "Saved new conversation history entry")
                                 
                                 geminiDao.pruneConversationHistory(

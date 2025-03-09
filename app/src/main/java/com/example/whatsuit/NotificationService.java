@@ -35,6 +35,7 @@ import kotlin.coroutines.EmptyCoroutineContext;
 import java.io.File;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class NotificationService extends NotificationListenerService {
     private static final String TAG = "AutoReplySystem";
@@ -45,6 +46,7 @@ public class NotificationService extends NotificationListenerService {
     private static final long NOTIFICATION_COOLDOWN = 5000; // 5 seconds cooldown
     private SharedPreferences processedNotifications;
     private final CoroutineScope serviceScope;
+    private final ConcurrentHashMap<String, Long> processingNotifications = new ConcurrentHashMap<>();
 
     public NotificationService() {
         // Use GlobalScope with IO dispatcher for background operations
@@ -112,10 +114,16 @@ public class NotificationService extends NotificationListenerService {
         }
     }
 
-    private boolean isRecentNotification(StatusBarNotification sbn, long currentTime) {
-        String notificationKey = sbn.getKey();
-        long lastProcessed = processedNotifications.getLong(notificationKey, 0);
-        return (currentTime - lastProcessed < NOTIFICATION_COOLDOWN);
+    private boolean canProcessNotification(StatusBarNotification sbn) {
+        String key = sbn.getKey();
+        long now = System.currentTimeMillis();
+        Long lastProcessTime = processingNotifications.putIfAbsent(key, now);
+        
+        if (lastProcessTime != null && (now - lastProcessTime) < NOTIFICATION_COOLDOWN) {
+            Log.d(TAG, "Skipping duplicate notification processing: " + key);
+            return false;
+        }
+        return true;
     }
 
     private void markNotificationProcessed(StatusBarNotification sbn, long currentTime) {
@@ -129,16 +137,9 @@ public class NotificationService extends NotificationListenerService {
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null) return;
 
-        long currentTime = System.currentTimeMillis();
-
-        // Only check for very recent duplicates (5 seconds)
-        if (isRecentNotification(sbn, currentTime)) {
-            Log.d(TAG, "Skipping very recent notification: " + sbn.getKey());
+        if (!canProcessNotification(sbn)) {
             return;
         }
-
-        // Mark this notification time
-        markNotificationProcessed(sbn, currentTime);
 
         BuildersKt.launch(
             serviceScope,
@@ -149,6 +150,8 @@ public class NotificationService extends NotificationListenerService {
                     handleNotification(sbn);
                 } catch (Exception e) {
                     Log.e(TAG, "Error handling notification", e);
+                } finally {
+                    processingNotifications.remove(sbn.getKey());
                 }
                 return Unit.INSTANCE;
             }
