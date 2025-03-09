@@ -69,6 +69,18 @@ public class NotificationDetailViewModel extends AndroidViewModel {
         });
     }
 
+    public void addConversation(ConversationHistory newConversation) {
+        executor.execute(() -> {
+            try {
+                database.getConversationHistoryDao().insert(newConversation);
+                loadConversations(newConversation.getNotificationId());
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Handle error if needed
+            }
+        });
+    }
+
     public void filterNotificationsByTimeRange(long startTime, long endTime) {
         NotificationEntity notification = currentNotification.getValue();
         if (notification == null) return;
