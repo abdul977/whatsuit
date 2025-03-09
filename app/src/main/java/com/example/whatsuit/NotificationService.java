@@ -488,6 +488,11 @@ long id;
     }
 
     private void generateAndSendReply(NotificationEntity notification, Notification.Action replyAction) {
+        if (notification.isAutoReplied()) {
+            Log.d(TAG, "Notification already auto-replied, skipping: " + notification.getId());
+            return;
+        }
+
         geminiService.generateReply(notification.getId(), notification.getContent(), new GeminiService.ResponseCallback() {
             @Override
             public void onPartialResponse(String text) {
