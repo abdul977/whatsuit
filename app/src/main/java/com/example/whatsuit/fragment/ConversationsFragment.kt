@@ -13,12 +13,16 @@ import com.example.whatsuit.R
 import com.example.whatsuit.adapter.ConversationHistoryAdapter
 import com.example.whatsuit.data.ConversationHistory
 import com.example.whatsuit.viewmodel.NotificationDetailViewModel
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
 
 class ConversationsFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
     private lateinit var viewModel: NotificationDetailViewModel
     private lateinit var adapter: ConversationHistoryAdapter
+    private lateinit var fab: FloatingActionButton
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -33,9 +37,11 @@ class ConversationsFragment : Fragment() {
 
         recyclerView = view.findViewById(R.id.conversationsRecyclerView)
         emptyView = view.findViewById(R.id.emptyView)
+        fab = view.findViewById(R.id.fab)
 
         setupViewModel()
         setupRecyclerView()
+        setupFab()
     }
 
     private fun setupRecyclerView() {
@@ -61,6 +67,44 @@ class ConversationsFragment : Fragment() {
                 adapter.updateConversations(conversations)
             }
         }
+    }
+
+    private fun setupFab() {
+        fab.setOnClickListener {
+            showAddConversationDialog()
+        }
+    }
+
+    private fun showAddConversationDialog() {
+        val dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_edit_conversation, null)
+
+        val messageInput = dialogView.findViewById<TextInputEditText>(R.id.messageEditText)
+        val responseInput = dialogView.findViewById<TextInputEditText>(R.id.responseEditText)
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.add_conversation)
+            .setView(dialogView)
+            .setPositiveButton(R.string.save) { dialog, _ ->
+                val newMessage = messageInput.text?.toString()
+                val newResponse = responseInput.text?.toString()
+
+                if (!newMessage.isNullOrBlank() && !newResponse.isNullOrBlank()) {
+                    val newConversation = ConversationHistory(
+                        message = newMessage,
+                        response = newResponse,
+                        notificationId = 0, // Replace with actual notification ID
+                        conversationId = "", // Replace with actual conversation ID
+                        timestamp = System.currentTimeMillis()
+                    )
+                    viewModel.addConversation(newConversation)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel) { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
     companion object {

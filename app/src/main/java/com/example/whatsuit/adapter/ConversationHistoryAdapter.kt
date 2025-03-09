@@ -26,6 +26,11 @@ class ConversationHistoryAdapter(
         notifyDataSetChanged()
     }
 
+    fun addConversation(newConversation: ConversationHistory) {
+        conversations = conversations + newConversation
+        notifyItemInserted(conversations.size - 1)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_conversation, parent, false)
