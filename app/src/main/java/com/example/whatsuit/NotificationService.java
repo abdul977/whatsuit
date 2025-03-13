@@ -81,34 +81,18 @@ public class NotificationService extends NotificationListenerService {
         geminiService = new GeminiService(this);
         
         try {
-            BuildersKt.launch(
-                serviceScope,
-                EmptyCoroutineContext.INSTANCE,
-                CoroutineStart.DEFAULT,
-                (scope, continuation) -> {
-                    try {
-                        Log.d(TAG, "Starting Gemini initialization");
-                        // Use proper Kotlin coroutine pattern for suspend function
-                        Boolean result = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                            // Call initialize without passing the continuation
-                            return geminiService.initialize(cont);
-                        });
-                        
-                        geminiInitialized = result != null && result;
-                        Log.d(TAG, "Gemini initialization completed successfully: " + geminiInitialized);
-                    } catch (Exception e) {
-                        Log.w(TAG, "Gemini initialization failed (will continue without auto-reply): " + e.getMessage());
-                        geminiInitialized = false;
-                    } finally {
-                        geminiInitializing = false;
-                    }
-                    return Unit.INSTANCE;
-                }
-            );
+            // Use runBlocking to make initialization synchronous
+            Boolean result = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
+                return geminiService.initialize(cont);
+            });
+            
+            geminiInitialized = result != null && result;
+            Log.d(TAG, "Gemini initialization completed with result: " + geminiInitialized);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to launch Gemini initialization", e);
-            geminiInitializing = false;
+            Log.e(TAG, "Gemini initialization failed", e);
             geminiInitialized = false;
+        } finally {
+            geminiInitializing = false;
         }
     }
 
@@ -350,17 +334,19 @@ long id;
                                 // Check for keyword match first
                                 KeywordActionEntity keywordAction = database.keywordActionDao()
                                     .findMatchingKeyword(notificationEntity.getContent());
-                                
+                                    
                                 if (keywordAction != null && keywordAction.isEnabled()) {
                                     Log.d(TAG, "Found matching keyword action: " + keywordAction.getKeyword());
                                     handleKeywordAction(action, keywordAction);
                                 } else {
-                                    // Fall back to Gemini response
-                                    Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
-                                        return geminiService.initialize(cont);
-                                    });
-                                    Log.d(TAG, "Gemini initialized for auto-reply");
-                                    generateAndSendReply(notificationEntity, action);
+                                    // Queue for Gemini response if not initialized
+                                    if (!geminiInitialized) {
+                                        Log.d(TAG, "Queueing notification for later processing");
+                                        geminiService.queueNotification(notificationEntity.getId(), 
+                                            createResponseCallback(action, notificationEntity));
+                                    } else {
+                                        generateAndSendReply(notificationEntity, action);
+                                    }
                                 }
                             } catch (Exception e) {
                                 Log.e(TAG, "Error during auto-reply", e);
@@ -485,6 +471,49 @@ long id;
         } catch (Exception e) {
             Log.e(TAG, "Failed to send media reply: " + e.getMessage(), e);
         }
+    }
+
+    private GeminiService.ResponseCallback createResponseCallback(Notification.Action action, NotificationEntity notification) {
+        return new GeminiService.ResponseCallback() {
+            @Override
+            public void onPartialResponse(String text) {
+                Log.d(TAG, "Partial response from Gemini (queued): " + text);
+            }
+
+            @Override
+            public void onComplete(String fullResponse) {
+                BuildersKt.launch(
+                    serviceScope,
+                    EmptyCoroutineContext.INSTANCE,
+                    CoroutineStart.DEFAULT,
+                    (scope, continuation) -> {
+                        try {
+                            // Update notification status atomically
+                            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (scope2, cont2) -> {
+                                database.runInTransaction(() -> {
+                                    notification.setAutoReplied(true);
+                                    notification.setAutoReplyContent(fullResponse);
+                                    database.notificationDao().update(notification);
+                                    return Unit.INSTANCE;
+                                });
+                                return Unit.INSTANCE;
+                            });
+                            
+                            sendReply(action, fullResponse);
+                            Log.d(TAG, "Generated and sent queued response: " + fullResponse);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error processing queued auto-reply", e);
+                        }
+                        return Unit.INSTANCE;
+                    }
+                );
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                Log.e(TAG, "Error generating queued reply from Gemini", error);
+            }
+        };
     }
 
     private void generateAndSendReply(NotificationEntity notification, Notification.Action replyAction) {

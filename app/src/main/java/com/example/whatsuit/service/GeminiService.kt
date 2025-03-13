@@ -63,6 +63,9 @@ class GeminiService(private val context: Context) {
     @Volatile
     private var isInitialized = false
     private var initializationDeferred: kotlinx.coroutines.Deferred<Boolean>? = null
+    private val pendingNotifications = mutableListOf<Pair<Long, ResponseCallback>>()
+    private var initializationRetryCount = 0
+    private val maxRetries = 3
 
     private suspend fun logConversationFlow(notificationId: Long) {
         try {
@@ -118,30 +121,70 @@ class GeminiService(private val context: Context) {
         initMutex.withLock {
             if (isInitialized) return@withLock true
 
-            val existingDeferred = initializationDeferred
-            if (existingDeferred?.isActive == true) {
-                try {
-                    return@withLock existingDeferred.await()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Previous initialization failed, will retry", e)
+            while (initializationRetryCount < maxRetries) {
+                val existingDeferred = initializationDeferred
+                if (existingDeferred?.isActive == true) {
+                    try {
+                        val result = existingDeferred.await()
+                        if (result) {
+                            processPendingNotifications()
+                            return@withLock true
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Previous initialization failed, attempt ${initializationRetryCount + 1}/${maxRetries}", e)
+                    }
                 }
-            }
 
-            val newDeferred = scope.async {
-                doInitialize()
-            }
-            
-            initializationDeferred = newDeferred
-            
-            try {
-                return@withLock newDeferred.await()
-            } catch (e: Exception) {
-                Log.e(TAG, "Initialization failed", e)
-                if (initializationDeferred === newDeferred) {
-                    initializationDeferred = null
+                val newDeferred = scope.async {
+                    doInitialize()
                 }
-                return@withLock false
+                
+                initializationDeferred = newDeferred
+                
+                try {
+                    val result = newDeferred.await()
+                    if (result) {
+                        processPendingNotifications()
+                        return@withLock true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Initialization failed on attempt ${initializationRetryCount + 1}/${maxRetries}", e)
+                    if (initializationDeferred === newDeferred) {
+                        initializationDeferred = null
+                    }
+                }
+                
+                initializationRetryCount++
+                if (initializationRetryCount < maxRetries) {
+                    delay(1000 * (initializationRetryCount + 1)) // Exponential backoff
+                }
             }
+            
+            Log.e(TAG, "Initialization failed after $maxRetries attempts")
+            return@withLock false
+        }
+    }
+
+    private suspend fun processPendingNotifications() {
+        val notifications = synchronized(pendingNotifications) {
+            val pending = pendingNotifications.toList()
+            pendingNotifications.clear()
+            pending
+        }
+        
+        for ((notificationId, callback) in notifications) {
+            try {
+                generateReply(notificationId, "", callback)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing queued notification $notificationId", e)
+                callback.onError(e)
+            }
+        }
+    }
+
+    fun queueNotification(notificationId: Long, callback: ResponseCallback) {
+        synchronized(pendingNotifications) {
+            pendingNotifications.add(Pair(notificationId, callback))
         }
     }
 
