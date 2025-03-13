@@ -15,7 +15,7 @@ class DetailPagerAdapter(
     override fun createFragment(position: Int): Fragment {
         return when (position) {
             0 -> NotificationsFragment.newInstance()
-            1 -> ConversationsFragment.newInstance()
+            1 -> ConversationsFragment.newInstance("default")
             else -> throw IllegalArgumentException("Invalid position $position")
         }
     }

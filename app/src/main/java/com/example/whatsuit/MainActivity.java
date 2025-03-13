@@ -61,7 +61,8 @@ import com.example.whatsuit.adapter.GroupedNotificationAdapter;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import androidx.lifecycle.Observer;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -77,18 +78,17 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private GroupedNotificationAdapter notificationAdapter;
     private TextView emptyView;
-    private SwipeRefreshLayout swipeRefresh;
     private NotificationDao notificationDao;
     private ConversationHistoryDao conversationHistoryDao;
     private AutoReplyManager autoReplyManager;
-    private ChipGroup filterChipGroup;
-    private String selectedPackage = null;
-    private List<AppInfo> appInfoList = new ArrayList<>();
-    private ExtendedFloatingActionButton fab;
+    private androidx.appcompat.widget.Toolbar toolbar;
+    private FloatingActionButton fab;
     private AppBarLayout appBarLayout;
+    private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
+    private Observer<List<NotificationEntity>> notificationsObserver;
+    private String selectedPackage = null;
     private long startTime = 0;
     private long endTime = Long.MAX_VALUE;
-    private SearchView searchView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -228,12 +228,10 @@ public class MainActivity extends AppCompatActivity {
         
         // Initialize views from regular layout
         recyclerView = findViewById(R.id.notificationsRecyclerView);
-        filterChipGroup = findViewById(R.id.filterChipGroup);
         emptyView = findViewById(R.id.emptyView);
-        swipeRefresh = findViewById(R.id.swipeRefresh);
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
-        searchView = findViewById(R.id.searchView);
+        toolbar = findViewById(R.id.toolbar);
         
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
@@ -266,17 +264,15 @@ public class MainActivity extends AppCompatActivity {
                 circularReveal.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
-                        // Start staggered animations for UI elements
                         animateUIElements();
                     }
                 });
-                
                 circularReveal.start();
                 return true;
             }
         });
     }
-    
+
     private void animateUIElements() {
         // Animate toolbar first
         appBarLayout.animate()
@@ -308,45 +304,30 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void finishMainActivityInitialization() {
-        // Set up notifications RecyclerView
+        // Set up toolbar
+        toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        
+        // Set up RecyclerView
+        recyclerView = findViewById(R.id.notificationsRecyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
         recyclerView.setAdapter(notificationAdapter);
-        
-        // Set up swipe to refresh
-        swipeRefresh.setOnRefreshListener(() -> {
-            loadNotifications();
-            swipeRefresh.setRefreshing(false);
-        });
-        
-        // Set up collapsing toolbar behavior
-        setupCollapsingToolbar();
-        
-        // FAB click listener
-        if (fab != null) {
-            fab.setOnClickListener(v -> showOptionsMenu());
-        }
-        
+
+        // Set up empty view
+        emptyView = findViewById(R.id.emptyView);
+
+        // Set up FAB
+        fab = findViewById(R.id.fab);
+        fab.setOnClickListener(v -> showNewMessageDialog());
+
         // Check for notification access permission
         if (!isNotificationServiceEnabled()) {
             showNotificationAccessDialog();
         }
-        
-        // Setup app filter
-        setupAppFilter();
-        
-        // Setup search view
-        setupSearchView();
-        
+
         // Load notifications
         loadNotifications();
-        
-        // Handle window insets
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
-        });
     }
 
     public void showConversationHistory(NotificationEntity notification) {
@@ -408,15 +389,77 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        int itemId = item.getItemId();
-        if (itemId == R.id.action_filter) {
+        int id = item.getItemId();
+        if (id == R.id.action_filter) {
             showTimeFilterDialog();
             return true;
-        } else if (itemId == R.id.action_gemini_config) {
-            startActivity(new Intent(this, GeminiConfigActivity.class));
+        } else if (id == R.id.action_auto_reply) {
+            if (isNotificationServiceEnabled()) {
+                startActivity(new Intent(this, AutoReplySettingsActivity.class));
+            } else {
+                showNotificationAccessDialog();
+            }
+            return true;
+        } else if (id == R.id.action_gemini_config) {
+            if (isNotificationServiceEnabled()) {
+                startActivity(new Intent(this, GeminiConfigActivity.class));
+            } else {
+                showNotificationAccessDialog();
+            }
+            return true;
+        } else if (id == R.id.action_notifications) {
+            Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+            startActivity(intent);
+            return true;
+        } else if (id == R.id.action_clear) {
+            showClearHistoryDialog();
+            return true;
+        } else if (id == R.id.action_about) {
+            showVersionInfo();
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void showClearHistoryDialog() {
+        new AlertDialog.Builder(this)
+            .setTitle("Clear History")
+            .setMessage("Are you sure you want to clear all notification and conversation history? This cannot be undone.")
+            .setPositiveButton("Clear", (dialog, which) -> {
+                new Thread(() -> {
+                    AppDatabase db = AppDatabase.getDatabase(this);
+                    db.runInTransaction(() -> {
+                        db.notificationDao().deleteAll();
+                        db.conversationHistoryDao().deleteAll();
+                    });
+                    runOnUiThread(() -> Toast.makeText(this, "History cleared", Toast.LENGTH_SHORT).show());
+                }).start();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void showVersionInfo() {
+        String version = "1.0";
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e("MainActivity", "Error getting version", e);
+        }
+        
+        new AlertDialog.Builder(this)
+            .setTitle("About WhatSuit")
+            .setMessage("Version " + version + "\n\n" +
+                    "WhatSuit helps you manage notifications and automate responses using " +
+                    "Google's Gemini AI technology.\n\n" +
+                    "Features:\n" +
+                    "• Smart notification management\n" +
+                    "• AI-powered auto-replies\n" +
+                    "• Multi-app support\n" +
+                    "• Conversation analysis\n" +
+                    "• Custom reply templates")
+            .setPositiveButton("OK", null)
+            .show();
     }
 
     private void showTimeFilterDialog() {
@@ -495,100 +538,20 @@ public class MainActivity extends AppCompatActivity {
         datePickerDialog.show();
     }
 
-    private void setupCollapsingToolbar() {
-        appBarLayout.addOnOffsetChangedListener((appBarLayout, verticalOffset) -> {
-            if (Math.abs(verticalOffset) == appBarLayout.getTotalScrollRange()) {
-                fab.shrink();
-            } else {
-                fab.extend();
-            }
-        });
+    private void showNewMessageDialog() {
+        // TODO: Implement new message dialog
+        Toast.makeText(this, "New message feature coming soon", Toast.LENGTH_SHORT).show();
     }
-
-    private void setupAppFilter() {
-        Chip allAppsChip = new Chip(this);
-        allAppsChip.setText("All Apps");
-        allAppsChip.setCheckable(true);
-        allAppsChip.setChecked(true);
-        filterChipGroup.addView(allAppsChip);
-
-        notificationDao.getDistinctApps().observe(this, apps -> {
-            filterChipGroup.removeViews(1, filterChipGroup.getChildCount() - 1);
-            appInfoList.clear();
-            appInfoList.addAll(apps);
-
-            for (AppInfo app : apps) {
-                Chip chip = new Chip(this);
-                chip.setText(app.getAppName());
-                chip.setCheckable(true);
-                filterChipGroup.addView(chip);
-            }
-        });
-
-        filterChipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) {
-                allAppsChip.setChecked(true);
-                selectedPackage = null;
-            } else {
-                int selectedChipId = checkedIds.get(0);
-                Chip selectedChip = group.findViewById(selectedChipId);
-                int chipIndex = group.indexOfChild(selectedChip) - 1;
-
-                if (chipIndex == -1) {
-                    selectedPackage = null;
-                } else if (chipIndex < appInfoList.size()) {
-                    selectedPackage = appInfoList.get(chipIndex).getPackageName();
-                }
-            }
-            loadNotifications();
-        });
-    }
-
-    private void setupSearchView() {
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String query) {
-                filterNotifications(query);
-                return true;
-            }
-
-            @Override
-            public boolean onQueryTextChange(String newText) {
-                filterNotifications(newText);
-                return true;
-            }
-        });
-    }
-
-    private void filterNotifications(String query) {
-        new Thread(() -> {
-            List<NotificationEntity> filteredList = new ArrayList<>();
-            for (NotificationEntity notification : notificationAdapter.getNotifications()) {
-                if (notification.getTitle().toLowerCase().contains(query.toLowerCase()) ||
-                    notification.getContent().toLowerCase().contains(query.toLowerCase())) {
-                    filteredList.add(notification);
-                }
-            }
-            runOnUiThread(() -> notificationAdapter.updateNotifications(filteredList));
-        }).start();
-    }
-
-    private LiveData<List<NotificationEntity>> currentNotificationsLiveData;
 
     private void loadNotifications() {
         try {
             // Remove any existing observer from the previous LiveData
-            if (currentNotificationsLiveData != null) {
-                currentNotificationsLiveData.removeObservers(this);
+            if (currentNotificationsLiveData != null && notificationsObserver != null) {
+                currentNotificationsLiveData.removeObserver(notificationsObserver);
             }
 
-            // Get new LiveData based on current filters
-            currentNotificationsLiveData = selectedPackage == null ?
-                    notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
-                    notificationDao.getNotificationsForApp(selectedPackage);
-
-            // Observe the new LiveData
-            currentNotificationsLiveData.observe(this, notifications -> {
+            // Create new observer
+            notificationsObserver = notifications -> {
                 try {
                     if (notifications != null && !notifications.isEmpty()) {
                         notificationAdapter.updateNotifications(notifications);
@@ -603,7 +566,15 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("MainActivity", "Error updating notifications", e);
                     Toast.makeText(this, "Error loading notifications. Please try again.", Toast.LENGTH_SHORT).show();
                 }
-            });
+            };
+
+            // Get new LiveData based on current filters
+            currentNotificationsLiveData = selectedPackage == null ?
+                    notificationDao.getSmartGroupedNotificationsInRange(startTime, endTime) :
+                    notificationDao.getNotificationsForApp(selectedPackage);
+
+            // Observe the new LiveData
+            currentNotificationsLiveData.observe(this, notificationsObserver);
         } catch (Exception e) {
             Log.e("MainActivity", "Error setting up notifications", e);
             Toast.makeText(this, "Error initializing notifications. Please restart the app.", Toast.LENGTH_LONG).show();

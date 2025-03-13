@@ -4,14 +4,40 @@
     
     <item
         android:id="@+id/action_filter"
-        android:icon="@android:drawable/ic_menu_sort_by_size"
+        android:icon="@drawable/ic_search"
         android:title="Filter"
         app:showAsAction="always"/>
 
     <item
-        android:id="@+id/action_gemini_config"
-        android:icon="@android:drawable/ic_menu_manage"
-        android:title="Gemini Configuration"
-        app:showAsAction="never"/>
+        android:id="@+id/action_settings"
+        android:icon="@drawable/ic_settings"
+        android:title="Settings"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/action_auto_reply"
+                android:icon="@drawable/ic_auto_reply"
+                android:title="Auto-Reply Configuration"/>
+                
+            <item
+                android:id="@+id/action_gemini_config"
+                android:icon="@drawable/ic_gemini"
+                android:title="AI Settings"/>
+                
+            <item
+                android:id="@+id/action_notifications"
+                android:icon="@drawable/ic_notifications_settings"
+                android:title="Notification Access"/>
 
+            <item
+                android:id="@+id/action_clear"
+                android:icon="@drawable/ic_delete"
+                android:title="Clear History"/>
+
+            <item
+                android:id="@+id/action_about"
+                android:icon="@drawable/ic_info"
+                android:title="About"/>
+        </menu>
+    </item>
 </menu>

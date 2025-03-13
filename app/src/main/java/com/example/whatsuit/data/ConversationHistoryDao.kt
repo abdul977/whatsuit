@@ -110,4 +110,7 @@ interface ConversationHistoryDao {
         WHERE id = :id
     """)
     suspend fun updateAnalysis(id: Long, analysis: String?, timestamp: Long?)
+    
+    @Query("DELETE FROM conversation_history")
+    fun deleteAll()
 }

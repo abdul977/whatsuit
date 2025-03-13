@@ -1,6 +1,17 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Base.Theme.WhatsUit" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Color scheme -->
+    <style name="SearchViewStyle" parent="Widget.AppCompat.SearchView">
+        <item name="android:maxWidth">800dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="queryBackground">@null</item>
+        <item name="searchIcon">@drawable/ic_search</item>
+        <item name="closeIcon">@drawable/ic_close</item>
+        <item name="queryHint">Search notifications</item>
+        <item name="android:textColorHint">@color/md_theme_onSurfaceVariant</item>
+    </style>
+
+    <style name="Base.Theme.WhatsUit" parent="Theme.Material3.Light.NoActionBar">
+        <!-- Material Design 3 colors -->
         <item name="colorPrimary">@color/md_theme_primary</item>
         <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
         <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>
@@ -15,25 +26,67 @@
         <item name="colorOnSurface">@color/md_theme_onSurface</item>
         <item name="colorSurfaceVariant">@color/md_theme_surfaceVariant</item>
         <item name="colorOnSurfaceVariant">@color/md_theme_onSurfaceVariant</item>
+        <item name="colorError">@color/md_theme_error</item>
+        <item name="colorOnError">@color/md_theme_onError</item>
+        <item name="colorErrorContainer">@color/md_theme_errorContainer</item>
+        <item name="colorOnErrorContainer">@color/md_theme_onErrorContainer</item>
         <item name="colorOutline">@color/md_theme_outline</item>
 
-        <!-- System bars -->
+        <!-- Status bar and navigation -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        
+        <!-- Edge-to-edge support -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
 
-        <!-- Enable edge-to-edge -->
-        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="o_mr1">shortEdges</item>
+        <!-- Chat-specific styles -->
+        <item name="android:textViewStyle">@style/ChatTextViewStyle</item>
+        <item name="floatingActionButtonStyle">@style/ChatFabStyle</item>
+        <item name="toolbarStyle">@style/ChatToolbarStyle</item>
+    </style>
 
-        <!-- Enable transitions -->
-        <item name="android:windowActivityTransitions">true</item>
-        <item name="android:windowEnterTransition">@android:transition/fade</item>
-        <item name="android:windowExitTransition">@android:transition/fade</item>
+    <!-- Chat-specific styles -->
+    <style name="ChatTextViewStyle" parent="Widget.MaterialComponents.TextView">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/black</item>
+        <item name="android:fontFamily">@font/roboto</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
 
-        <!-- Typography -->
-        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.WhatsUit.HeadlineMedium</item>
-        <item name="textAppearanceBodyMedium">@style/TextAppearance.WhatsUit.BodyMedium</item>
+    <style name="ChatFabStyle" parent="Widget.MaterialComponents.FloatingActionButton">
+        <item name="backgroundTint">@color/md_theme_primary</item>
+        <item name="tint">@color/white</item>
+        <item name="elevation">6dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="ChatToolbarStyle" parent="Widget.MaterialComponents.Toolbar">
+        <item name="android:background">@color/white</item>
+        <item name="titleTextColor">@color/black</item>
+        <item name="navigationIconTint">@color/black</item>
+        <item name="titleTextAppearance">@style/ChatToolbarTitleStyle</item>
+    </style>
+
+    <style name="ChatToolbarTitleStyle" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">@color/black</item>
+        <item name="android:fontFamily">@font/roboto_medium</item>
+    </style>
+
+    <style name="ChatBubbleTextStyle" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+        <item name="android:fontFamily">@font/roboto</item>
+    </style>
+
+    <style name="ChatTimestampStyle" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:alpha">0.7</item>
+        <item name="android:fontFamily">@font/roboto</item>
     </style>
 
     <style name="Theme.WhatsUit" parent="Base.Theme.WhatsUit" />
@@ -57,5 +110,12 @@
         <item name="android:textSize">14sp</item>
         <item name="android:letterSpacing">0.0178571429</item>
         <item name="android:fontFamily">@font/roboto</item>
+    </style>
+
+    <style name="TextAppearance.WhatsUit.HeadlineLarge" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:textSize">32sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:fontFamily">@font/roboto_medium</item>
+        <item name="android:textStyle">bold</item>
     </style>
 </resources>

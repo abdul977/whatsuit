@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="8dp"
-    android:layout_marginVertical="4dp"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="12dp"
-    app:strokeWidth="0dp"
+    android:background="@color/white"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true">
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/gradient_header"
-        android:padding="16dp">
 
         <ImageView
             android:id="@+id/appIcon"
@@ -36,7 +29,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-            android:textColor="@color/md_theme_onPrimary"
+            android:textColor="@color/black"
             app:layout_constraintStart_toEndOf="@id/appIcon"
             app:layout_constraintEnd_toStartOf="@id/notificationCount"
             app:layout_constraintTop_toTopOf="parent"
@@ -48,8 +41,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:textColor="@color/md_theme_primary"
-            app:chipBackgroundColor="@color/md_theme_onPrimary"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
             app:layout_constraintEnd_toStartOf="@+id/expandIcon"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -57,14 +50,14 @@
 
         <ImageView
             android:id="@+id/expandIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:padding="2dp"
             android:src="@drawable/ic_expand"
-            android:tint="@color/md_theme_onPrimary"
+            android:tint="@color/md_theme_onSurfaceVariant"
             android:contentDescription="Expand group"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-</com.google.android.material.card.MaterialCardView>

@@ -12,24 +12,24 @@
         android:id="@+id/messageContainer"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@drawable/user_message_bubble"
+        android:background="@drawable/assistant_message_bubble"
         android:orientation="vertical"
         android:padding="12dp"
         app:layout_constrainedWidth="true"
         app:layout_constraintWidth_max="wrap"
-        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintWidth_percent="0.8"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/space">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/space">
 
         <TextView
             android:id="@+id/messageContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/md_theme_onPrimaryContainer"
+            android:textColor="@color/md_theme_onSurfaceVariant"
             style="@style/ChatBubbleTextStyle"
-            tools:text="This is a sample message that might be longer and wrap to multiple lines"/>
+            tools:text="This is an assistant response that might be longer and wrap to multiple lines"/>
 
         <TextView
             android:id="@+id/timestamp"
@@ -38,8 +38,8 @@
             android:layout_gravity="end"
             android:layout_marginTop="4dp"
             style="@style/ChatTimestampStyle"
-            android:textColor="@color/md_theme_onPrimaryContainer"
-            tools:text="2:30 PM"/>
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            tools:text="2:31 PM"/>
     </LinearLayout>
 
     <Space
@@ -47,7 +47,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintWidth_percent="0.15"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

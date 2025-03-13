@@ -3,122 +3,91 @@ package com.example.whatsuit.adapter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.whatsuit.R
 import com.example.whatsuit.data.ConversationHistory
-import com.google.android.material.textfield.TextInputEditText
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
-class ConversationHistoryAdapter(
-    private val onEdit: (ConversationHistory, String, String) -> Unit
-) : RecyclerView.Adapter<ConversationHistoryAdapter.ViewHolder>() {
+class ConversationHistoryAdapter : ListAdapter<ConversationHistory, RecyclerView.ViewHolder>(ConversationDiffCallback()) {
 
-    private var conversations = listOf<ConversationHistory>()
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-
-    fun updateConversations(newConversations: List<ConversationHistory>) {
-        conversations = newConversations
-        notifyDataSetChanged()
+    companion object {
+        private const val VIEW_TYPE_USER = 1
+        private const val VIEW_TYPE_ASSISTANT = 2
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_conversation, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val conversation = conversations[position]
-        holder.bind(conversation)
-    }
-
-    override fun getItemCount() = conversations.size
-
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val messageText: TextView = itemView.findViewById(R.id.messageText)
-        private val responseText: TextView = itemView.findViewById(R.id.responseText)
-        private val timestampText: TextView = itemView.findViewById(R.id.timestampText)
-        private val editMessageButton: ImageButton = itemView.findViewById(R.id.editMessageButton)
-        private val editResponseButton: ImageButton = itemView.findViewById(R.id.editResponseButton)
-
-        fun bind(conversation: ConversationHistory) {
-            messageText.text = conversation.message
-            responseText.text = conversation.response
-            timestampText.text = dateFormat.format(Date(conversation.timestamp))
-            
-            if (conversation.isModified) {
-                timestampText.text = "${timestampText.text} (edited)"
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            VIEW_TYPE_USER -> {
+                val view = inflater.inflate(R.layout.item_conversation, parent, false)
+                UserMessageViewHolder(view)
             }
-
-            editMessageButton.setOnClickListener {
-                showEditDialog(conversation, true)
+            VIEW_TYPE_ASSISTANT -> {
+                val view = inflater.inflate(R.layout.item_assistant_conversation, parent, false)
+                AssistantMessageViewHolder(view)
             }
+            else -> throw IllegalArgumentException("Invalid view type")
+        }
+    }
 
-            editResponseButton.setOnClickListener {
-                showEditDialog(conversation, false)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val item = getItem(position)
+        when (holder) {
+            is UserMessageViewHolder -> {
+                holder.bind(item.message)
+                holder.bindTimestamp(item.timestamp)
+            }
+            is AssistantMessageViewHolder -> {
+                holder.bind(item.response)
+                holder.bindTimestamp(item.timestamp)
             }
         }
+    }
 
-        private fun showEditDialog(conversation: ConversationHistory, isMessage: Boolean) {
-            val context = itemView.context
-            val dialogView = LayoutInflater.from(context)
-                .inflate(R.layout.dialog_edit_conversation, null)
+    override fun getItemViewType(position: Int): Int {
+        // If position is even, it's a user message, otherwise it's an assistant response
+        return if (position % 2 == 0) VIEW_TYPE_USER else VIEW_TYPE_ASSISTANT
+    }
 
-            val messageInput = dialogView.findViewById<TextInputEditText>(R.id.messageEditText)
-            val responseInput = dialogView.findViewById<TextInputEditText>(R.id.responseEditText)
+    class UserMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val messageContent: TextView = itemView.findViewById(R.id.messageContent)
+        private val timestamp: TextView = itemView.findViewById(R.id.timestamp)
+        private val dateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
-            messageInput.setText(conversation.message)
-            responseInput.setText(conversation.response)
-
-            // If editing only message or response, disable the other field
-            if (isMessage) {
-                responseInput.isEnabled = false
-            } else {
-                messageInput.isEnabled = false
-            }
-
-            val dialog = AlertDialog.Builder(context)
-                .setTitle(R.string.edit_conversation)
-                .setView(dialogView)
-                .create()
-
-            // Use buttons from the dialog layout
-            dialogView.findViewById<View>(R.id.saveButton).setOnClickListener {
-                val newMessage = messageInput.text?.toString()
-                val newResponse = responseInput.text?.toString()
-
-                val validationResult = conversation.validateEdit(
-                    newMessage = if (isMessage) newMessage else conversation.message,
-                    newResponse = if (isMessage) conversation.response else newResponse
-                )
-
-                if (validationResult.first) {
-                    onEdit(
-                        conversation,
-                        if (isMessage) newMessage!! else conversation.message,
-                        if (isMessage) conversation.response else newResponse!!
-                    )
-                    dialog.dismiss()
-                } else {
-                    dialog.dismiss()
-                    // Show error message
-                    AlertDialog.Builder(context)
-                        .setMessage(validationResult.second)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show()
-                }
-            }
-
-            dialogView.findViewById<View>(R.id.cancelButton).setOnClickListener {
-                dialog.dismiss()
-            }
-
-            dialog.show()
+        fun bind(message: String?) {
+            messageContent.text = message ?: ""
         }
+
+        fun bindTimestamp(time: Long?) {
+            timestamp.text = time?.let { dateFormat.format(it) } ?: ""
+        }
+    }
+
+    class AssistantMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val messageContent: TextView = itemView.findViewById(R.id.messageContent)
+        private val timestamp: TextView = itemView.findViewById(R.id.timestamp)
+        private val dateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
+        fun bind(message: String?) {
+            messageContent.text = message ?: ""
+        }
+
+        fun bindTimestamp(time: Long?) {
+            timestamp.text = time?.let { dateFormat.format(it) } ?: ""
+        }
+    }
+}
+
+private class ConversationDiffCallback : DiffUtil.ItemCallback<ConversationHistory>() {
+    override fun areItemsTheSame(oldItem: ConversationHistory, newItem: ConversationHistory): Boolean {
+        return oldItem.id == newItem.id
+    }
+
+    override fun areContentsTheSame(oldItem: ConversationHistory, newItem: ConversationHistory): Boolean {
+        return oldItem == newItem
     }
 }

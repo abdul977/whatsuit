@@ -1,28 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/md_theme_background">
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/conversationsRecyclerView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:padding="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:paddingTop="8dp"
+        android:paddingBottom="80dp"
+        android:scrollbars="vertical"
+        android:scrollbarStyle="outsideOverlay"
+        tools:listitem="@layout/item_conversation"/>
 
-    <TextView
-        android:id="@+id/emptyView"
-        android:layout_width="wrap_content"
+    <com.google.android.material.bottomappbar.BottomAppBar
+        android:id="@+id/bottomAppBar"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No conversations yet"
-        android:textAppearance="?attr/textAppearanceBody1"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:layout_gravity="bottom"
+        android:background="@color/white"
+        app:contentInsetStart="0dp"
+        app:elevation="8dp">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <EditText
+                android:id="@+id/messageInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/message_input_background"
+                android:hint="Type a message"
+                android:textColorHint="@color/md_theme_onSurfaceVariant"
+                android:textColor="@color/md_theme_onSurface"
+                android:inputType="textMultiLine"
+                android:maxLines="4"
+                android:minHeight="48dp"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="12dp"
+                android:layout_marginEnd="8dp"
+                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                android:importantForAutofill="no"/>
+
+            <ImageButton
+                android:id="@+id/sendButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/send_button_ripple"
+                android:contentDescription="Send message"
+                android:src="@drawable/ic_send"
+                android:tint="@drawable/send_button_state"
+                android:enabled="false"
+                android:padding="12dp"/>
+
+        </LinearLayout>
+    </com.google.android.material.bottomappbar.BottomAppBar>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

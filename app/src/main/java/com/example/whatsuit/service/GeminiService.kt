@@ -13,6 +13,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import androidx.room.withTransaction
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.milliseconds
 
 class GeminiService(private val context: Context) {
     private companion object {
@@ -156,7 +157,7 @@ class GeminiService(private val context: Context) {
                 
                 initializationRetryCount++
                 if (initializationRetryCount < maxRetries) {
-                    delay(1000 * (initializationRetryCount + 1)) // Exponential backoff
+                    delay((1000 * (initializationRetryCount + 1)).milliseconds) // Exponential backoff
                 }
             }
             
