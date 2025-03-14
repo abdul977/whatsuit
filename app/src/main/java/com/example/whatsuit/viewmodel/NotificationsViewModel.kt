@@ -13,23 +13,24 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
     private val database = AppDatabase.getDatabase(application.applicationContext)
     private val notificationDao = database.notificationDao()
     private val searchQuery = MutableLiveData<String>("")
-    private val allNotifications = notificationDao.getAllNotifications()
+    // Get notifications filtered by search query
+    val filteredNotifications: LiveData<List<NotificationEntity>> = 
+        searchQuery.switchMap { query ->
+            if (query.isEmpty()) {
+                notificationDao.getAllNotifications()
+            } else {
+                notificationDao.searchNotifications("%$query%")
+            }
+        }
+
+    // Get notifications categorized by app name
+    val categorizedNotifications: LiveData<Map<String, List<NotificationEntity>>> = 
+        filteredNotifications.map { notifications ->
+            notifications.groupBy { it.appName ?: "Unknown" }
+                       .toSortedMap()
+        }
 
     fun setSearchQuery(query: String) {
         searchQuery.value = query
     }
-
-    val categorizedNotifications: LiveData<Map<String, List<NotificationEntity>>> = 
-        searchQuery.switchMap { query: String ->
-            allNotifications.map { notifications: List<NotificationEntity> ->
-                notifications
-                    .filter { notification ->
-                        if (query.isEmpty()) true
-                        else (notification.title?.contains(query, ignoreCase = true) == true ||
-                              notification.content?.contains(query, ignoreCase = true) == true)
-                    }
-                    .groupBy { it.appName ?: "Unknown" }
-                    .toSortedMap()
-            }
-        }
 }

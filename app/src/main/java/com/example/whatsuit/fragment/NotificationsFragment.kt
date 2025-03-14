@@ -10,52 +10,61 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.whatsuit.R
-import com.example.whatsuit.adapter.CategorizedNotificationAdapter
+import com.example.whatsuit.adapter.NotificationAdapter
+import com.example.whatsuit.databinding.FragmentNotificationsBinding
 import com.example.whatsuit.viewmodel.NotificationsViewModel
 
 class NotificationsFragment : Fragment() {
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var emptyView: TextView
+    private lateinit var binding: FragmentNotificationsBinding
     private lateinit var viewModel: NotificationsViewModel
-    private lateinit var adapter: CategorizedNotificationAdapter
+    private lateinit var adapter: NotificationAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_notifications, container, false)
+    ): View {
+        binding = FragmentNotificationsBinding.inflate(inflater, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        recyclerView = view.findViewById(R.id.relatedNotificationsRecyclerView)
-        emptyView = view.findViewById(R.id.emptyView)
-
+        
+        viewModel = ViewModelProvider(this)[NotificationsViewModel::class.java]
+        
         setupRecyclerView()
-        setupViewModel()
+        setupSearchView()
+        observeNotifications()
     }
 
     private fun setupRecyclerView() {
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = CategorizedNotificationAdapter(requireContext().packageManager)
-        recyclerView.adapter = adapter
+        adapter = NotificationAdapter()
+        binding.recyclerView.apply {
+            layoutManager = LinearLayoutManager(context)
+            adapter = this@NotificationsFragment.adapter
+        }
     }
 
-    private fun setupViewModel() {
-        viewModel = ViewModelProvider(this)[NotificationsViewModel::class.java]
-        
-        viewModel.categorizedNotifications.observe(viewLifecycleOwner) { notifications ->
-            if (notifications.isNullOrEmpty()) {
-                recyclerView.visibility = View.GONE
-                emptyView.visibility = View.VISIBLE
-                emptyView.text = getString(R.string.no_notifications)
-            } else {
-                recyclerView.visibility = View.VISIBLE
-                emptyView.visibility = View.GONE
-                adapter.setCategorizedNotifications(notifications)
+    private fun setupSearchView() {
+        binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                query?.let { viewModel.setSearchQuery(it) }
+                return true
             }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                newText?.let { viewModel.setSearchQuery(it) }
+                return true
+            }
+        })
+    }
+
+    private fun observeNotifications() {
+        viewModel.filteredNotifications.observe(viewLifecycleOwner) { notifications ->
+            adapter.submitList(notifications)
+            binding.emptyView.visibility = if (notifications.isEmpty()) View.VISIBLE else View.GONE
+            binding.recyclerView.visibility = if (notifications.isEmpty()) View.GONE else View.VISIBLE
         }
     }
 

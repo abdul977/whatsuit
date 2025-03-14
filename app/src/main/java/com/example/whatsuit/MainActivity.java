@@ -314,7 +314,7 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
         // Initialize ViewModel
-        notificationsViewModel = new ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory.getInstance(getApplication())).get(NotificationsViewModel.class);
+        notificationsViewModel = new ViewModelProvider(this).get(NotificationsViewModel.class);
         
         // Set up RecyclerView
         recyclerView = findViewById(R.id.notificationsRecyclerView);
@@ -334,8 +334,18 @@ public class MainActivity extends AppCompatActivity {
             showNotificationAccessDialog();
         }
 
-        // Load notifications
-        loadNotifications();
+        // Observe notifications
+        notificationsViewModel.getFilteredNotifications().observe(this, notifications -> {
+            if (notifications != null && !notifications.isEmpty()) {
+                notificationAdapter.updateNotifications(notifications);
+                emptyView.setVisibility(View.GONE);
+                recyclerView.setVisibility(View.VISIBLE);
+            } else {
+                notificationAdapter.updateNotifications(new ArrayList<>());
+                emptyView.setVisibility(View.VISIBLE);
+                recyclerView.setVisibility(View.GONE);
+            }
+        });
     }
 
     public void showConversationHistory(NotificationEntity notification) {
