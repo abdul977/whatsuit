@@ -3,9 +3,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     
     <item
-        android:id="@+id/action_filter"
+        android:id="@+id/action_search"
         android:icon="@drawable/ic_search"
-        android:title="Filter"
+        android:title="@string/search_notifications"
+        app:actionViewClass="androidx.appcompat.widget.SearchView"
+        app:showAsAction="collapseActionView|ifRoom"
+        app:theme="@style/Theme.WhatSuit.SearchView"/>
+
+    <item
+        android:id="@+id/action_filter"
+        android:icon="@drawable/ic_filter"
+        android:title="@string/filter_notifications"
+        android:contentDescription="@string/filter_notifications"
         app:showAsAction="always"/>
 
     <item

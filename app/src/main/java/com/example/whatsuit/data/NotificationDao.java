@@ -27,6 +27,9 @@ public interface NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
     LiveData<List<NotificationEntity>> getAllNotifications();
 
+    @Query("SELECT * FROM notifications WHERE title LIKE :query OR content LIKE :query ORDER BY timestamp DESC")
+    LiveData<List<NotificationEntity>> searchNotifications(String query);
+
     @Query("DELETE FROM notifications")
     void deleteAll();
 

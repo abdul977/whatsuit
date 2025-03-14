@@ -10,14 +10,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.whatsuit.R
-import com.example.whatsuit.adapter.RelatedNotificationsAdapter
-import com.example.whatsuit.viewmodel.NotificationDetailViewModel
+import com.example.whatsuit.adapter.CategorizedNotificationAdapter
+import com.example.whatsuit.viewmodel.NotificationsViewModel
 
 class NotificationsFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
-    private lateinit var viewModel: NotificationDetailViewModel
-    private lateinit var adapter: RelatedNotificationsAdapter
+    private lateinit var viewModel: NotificationsViewModel
+    private lateinit var adapter: CategorizedNotificationAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -39,21 +39,22 @@ class NotificationsFragment : Fragment() {
 
     private fun setupRecyclerView() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = RelatedNotificationsAdapter()
+        adapter = CategorizedNotificationAdapter(requireContext().packageManager)
         recyclerView.adapter = adapter
     }
 
     private fun setupViewModel() {
-        viewModel = ViewModelProvider(requireActivity())[NotificationDetailViewModel::class.java]
+        viewModel = ViewModelProvider(this)[NotificationsViewModel::class.java]
         
-        viewModel.getRelatedNotifications().observe(viewLifecycleOwner) { notifications ->
+        viewModel.categorizedNotifications.observe(viewLifecycleOwner) { notifications ->
             if (notifications.isNullOrEmpty()) {
                 recyclerView.visibility = View.GONE
                 emptyView.visibility = View.VISIBLE
+                emptyView.text = getString(R.string.no_notifications)
             } else {
                 recyclerView.visibility = View.VISIBLE
                 emptyView.visibility = View.GONE
-                adapter.setNotifications(notifications)
+                adapter.setCategorizedNotifications(notifications)
             }
         }
     }

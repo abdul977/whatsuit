@@ -42,12 +42,14 @@ import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.LiveData;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
+import com.example.whatsuit.viewmodel.NotificationsViewModel;
 import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.service.GeminiService;
 import com.example.whatsuit.data.NotificationDao;
@@ -303,10 +305,16 @@ public class MainActivity extends AppCompatActivity {
         finishMainActivityInitialization();
     }
     
+    private SearchView searchView;
+    private NotificationsViewModel notificationsViewModel;
+
     private void finishMainActivityInitialization() {
         // Set up toolbar
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        // Initialize ViewModel
+        notificationsViewModel = new ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory.getInstance(getApplication())).get(NotificationsViewModel.class);
         
         // Set up RecyclerView
         recyclerView = findViewById(R.id.notificationsRecyclerView);
@@ -384,13 +392,75 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
+        
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+        searchView = (SearchView) searchItem.getActionView();
+        searchView.setQueryHint(getString(R.string.search_notifications_hint));
+        searchView.setMaxWidth(Integer.MAX_VALUE);
+        searchView.setIconifiedByDefault(true);
+        searchView.setQueryRefinementEnabled(true);
+        searchView.setBackground(getDrawable(R.drawable.search_filter_background));
+        searchView.setContentDescription(getString(R.string.search_notifications));
+        
+        // Style the search text
+        int searchPlateId = searchView.getContext().getResources()
+                .getIdentifier("android:id/search_src_text", null, null);
+        TextView searchPlateTextView = searchView.findViewById(searchPlateId);
+        if (searchPlateTextView != null) {
+            searchPlateTextView.setTextColor(getColor(R.color.md_theme_onSurface));
+            searchPlateTextView.setHintTextColor(getColor(R.color.md_theme_onSurfaceVariant));
+        }
+
+        // Remove the underline
+        View searchPlate = searchView.findViewById(androidx.appcompat.R.id.search_plate);
+        if (searchPlate != null) {
+            searchPlate.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        }
+
+        // Clear focus when iconified
+        searchView.setOnCloseListener(() -> {
+            searchView.clearFocus();
+            return false;
+        });
+
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                notificationsViewModel.setSearchQuery(query);
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                notificationsViewModel.setSearchQuery(newText);
+                return true;
+            }
+        });
+
+        // Handle collapsing/expanding the SearchView
+        searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
+            @Override
+            public boolean onMenuItemActionExpand(MenuItem item) {
+                return true;
+            }
+
+            @Override
+            public boolean onMenuItemActionCollapse(MenuItem item) {
+                notificationsViewModel.setSearchQuery(""); // Clear search when collapsed
+                return true;
+            }
+        });
+
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.action_filter) {
+        if (id == R.id.action_search) {
+            // Let the SearchView handle its own actions
+            return false;
+        } else if (id == R.id.action_filter) {
             showTimeFilterDialog();
             return true;
         } else if (id == R.id.action_auto_reply) {
