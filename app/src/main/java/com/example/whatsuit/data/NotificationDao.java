@@ -214,6 +214,13 @@ public interface NotificationDao {
     @Query("SELECT * FROM notifications WHERE id = :id")
     NotificationEntity getNotificationByIdSync(long id);
 
+    @Query("SELECT * FROM notifications " +
+           "WHERE conversationId = :conversationId " +
+           "AND timestamp >= :startTime " +
+           "AND timestamp <= :endTime " +
+           "ORDER BY timestamp ASC")
+    List<NotificationEntity> getNotificationsInTimeRange(String conversationId, long startTime, long endTime);
+
     // Get all notifications with smart grouping
     @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("WITH GroupedNotifs AS (" +

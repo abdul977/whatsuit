@@ -26,6 +26,7 @@ import com.example.whatsuit.data.AppSettingDao;
 import com.example.whatsuit.data.AppSettingEntity;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.service.GeminiService;
+import com.example.whatsuit.util.SentMessageTracker;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,6 +73,13 @@ public class NotificationService extends NotificationListenerService {
             
             String title = extras.getString(Notification.EXTRA_TITLE, "");
             String text = extras.getString(Notification.EXTRA_TEXT, "");
+            
+            // Skip if this is our own sent message
+            if (SentMessageTracker.getInstance().isLikelyOwnMessage(text)) {
+                Log.d(TAG, "Skipping processing of our own message: " + text);
+                return;
+            }
+            
             String packageName = sbn.getPackageName();
             
             // Get app name from package name
@@ -90,6 +98,16 @@ public class NotificationService extends NotificationListenerService {
             // Generate conversation ID
             String conversationId = generateConversationId(entity);
             entity.setConversationId(conversationId);
+
+            // Log notification details
+            Log.i(TAG, "\n====== NEW NOTIFICATION RECEIVED ======" +
+                "\nApp: " + appName +
+                "\nPackage: " + packageName +
+                "\nTitle: " + title +
+                "\nContent: " + text +
+                "\nConversation ID: " + conversationId +
+                "\nTimestamp: " + new java.util.Date(sbn.getPostTime()) +
+                "\n===================================");
 
             // Insert or update notification in database using background thread
             executorService.execute(() -> {
@@ -142,13 +160,25 @@ public class NotificationService extends NotificationListenerService {
     }
 
     private String generateConversationId(NotificationEntity entity) {
-        String baseId = entity.getPackageName() + "_" + 
-            (entity.getPackageName().contains("whatsapp") ? 
-                entity.getTitle().replaceAll("[+ -]", "") :
-                entity.getTitle());
+        if (entity.getPackageName().contains("whatsapp")) {
+            String title = entity.getTitle();
+            if (title.matches(".*[0-9+].*")) {
+                // For phone number based titles, normalize the number
+                String normalizedNumber = title.replaceAll("[^0-9+]", "");
+                // Keep only last 11 digits if longer
+                if (normalizedNumber.length() > 11) {
+                    normalizedNumber = normalizedNumber.substring(normalizedNumber.length() - 11);
+                }
+                return "whatsapp_" + normalizedNumber;
+            } else {
+                // For name-based titles (e.g., "John Emialin"), use normalized name
+                String normalizedName = title.trim().toLowerCase().replaceAll("\\s+", "_");
+                return "whatsapp_contact_" + normalizedName;
+            }
+        }
         
-        // Add timestamp to millisecond precision to differentiate rapid messages
-        return baseId + "_" + System.currentTimeMillis();
+        // For other apps, use package and normalized title
+        return entity.getPackageName() + "_" + entity.getTitle().trim().toLowerCase().replaceAll("\\s+", "_");
     }
 
     private boolean shouldAutoReply(String packageName) {
@@ -249,6 +279,9 @@ public class NotificationService extends NotificationListenerService {
                         }
                         
                         finalReplyAction.actionIntent.send(NotificationService.this, 0, intent);
+                        
+                        // Record the sent message to prevent feedback loops
+                        SentMessageTracker.getInstance().recordSentMessage(response);
 
                         // Update notification entity with auto-reply info
                         executorService.execute(() -> {
@@ -256,7 +289,13 @@ public class NotificationService extends NotificationListenerService {
                                 entity.setAutoReplied(true);
                                 entity.setAutoReplyContent(response);
                                 database.notificationDao().upsertNotification(entity);
-                                Log.d(TAG, "Auto-reply sent and saved to database");
+                    Log.i(TAG, "\n====== AUTO-REPLY SENT ======" +
+                        "\nNotification ID: " + entity.getId() +
+                        "\nConversation ID: " + entity.getConversationId() +
+                        "\nOriginal Message: " + entity.getContent() +
+                        "\nAuto-Reply: " + response +
+                        "\nTimestamp: " + new java.util.Date() +
+                        "\n===========================");
                             } catch (Exception e) {
                                 Log.e(TAG, "Error updating notification after auto-reply", e);
                             }

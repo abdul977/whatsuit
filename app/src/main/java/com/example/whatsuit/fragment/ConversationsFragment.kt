@@ -170,8 +170,8 @@ class ConversationsFragment : Fragment() {
                 // Get response from Gemini
                 geminiService?.generateReply(
                     notificationId = 0,
-                    message = message,
-                    object : GeminiService.ResponseCallback {
+                    initialMessage = message,
+                    callback = object : GeminiService.ResponseCallback {
                         override fun onPartialResponse(text: String) {
                             // Could implement typing animation here
                         }

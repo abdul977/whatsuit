@@ -205,8 +205,8 @@ import kotlin.coroutines.resumeWithException
                 kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
                     geminiService.generateReply(
                         notificationId = -1,
-                        message = "Test API configuration message",
-                        object : GeminiService.ResponseCallback {
+                        initialMessage = "Test API configuration message",
+                        callback = object : GeminiService.ResponseCallback {
                             override fun onPartialResponse(text: String) {
                                 Log.d(TAG, "Received partial test response: $text")
                             }

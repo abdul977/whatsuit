@@ -288,17 +288,42 @@ class GeminiService(private val context: Context) {
 
     fun generateReply(
         notificationId: Long,
-        message: String,
+        initialMessage: String,
         callback: ResponseCallback
     ) = scope.launch {
         try {
             // Skip if we've recently processed this notification
-            if (processedNotifications.contains(notificationId)) {
-                Log.d(TAG, "Skipping duplicate processing of notification: $notificationId")
-                withContext(Dispatchers.Main) {
-                    callback.onComplete("This message was recently processed.")
-                }
-                return@launch
+            //if (processedNotifications.contains(notificationId)) {
+            //    Log.d(TAG, "Skipping duplicate processing of notification: $notificationId")
+            //    withContext(Dispatchers.Main) {
+            //        callback.onComplete("This message was recently processed.")
+            //    }
+            //    return@launch
+            //}
+
+            val notification = getNotificationWithRetry(notificationId) 
+                ?: throw IllegalStateException("Unable to retrieve notification after retries")
+
+            // Get conversation context to check for rapid messages
+            var message = initialMessage
+            val contextData = conversationManager.getConversationContext(notificationId, notification)
+            
+            // If there are recent messages in the sequence, wait briefly for more
+            if (contextData.recentMessages.size > 1 && 
+                System.currentTimeMillis() - contextData.recentMessages.last().timestamp < 1000) {
+                    
+                Log.d(TAG, "Detected rapid message sequence, waiting for more messages...")
+                delay(1000) // Wait 1 second for potential follow-up messages
+                
+                // Refresh context to get any new messages
+                val updatedContext = conversationManager.getConversationContext(notificationId, notification)
+                
+                // Combine all recent messages for context
+                var updatedMessage = updatedContext.recentMessages
+                    .joinToString("\n") { it.content }
+                
+                message = updatedMessage // Use combined messages as input
+                Log.d(TAG, "Processing combined messages: $updatedMessage")
             }
             
             // Track this notification to prevent duplicate processing
@@ -321,7 +346,9 @@ class GeminiService(private val context: Context) {
             }
             // Special case for API testing
             val isTestMode = notificationId == -1L
-            val notification = if (isTestMode) {
+            
+            // Get or create notification based on test mode
+            val testOrRealNotification = if (isTestMode) {
                 // Create fully initialized dummy notification for testing
                 NotificationEntity().apply {
                     setId(-1L)
@@ -346,7 +373,7 @@ class GeminiService(private val context: Context) {
             
             // Log conversation flow except for test mode
             if (!isTestMode) {
-                logConversationFlow(notification)
+                logConversationFlow(testOrRealNotification)
                 Log.d(TAG, "Processing real notification: id=$notificationId")
             } else {
                 Log.d(TAG, "Running in test mode with dummy notification")
@@ -357,15 +384,15 @@ class GeminiService(private val context: Context) {
             Log.d(TAG, "Retrieved Gemini config: modelName=${config.modelName}, historyLimit=${config.maxHistoryPerThread}")
             val model = generativeModel ?: throw IllegalStateException("Gemini model not initialized")
 
-        Log.d(NOTIFICATION_TAG, "Thread ${Thread.currentThread().id}: Using cached notification")
+            Log.d(NOTIFICATION_TAG, "Thread ${Thread.currentThread().id}: Using cached notification")
             
             // Get all historical conversations for this thread
             val existingHistory = database.conversationHistoryDao()
-                .getHistoryForConversationSync(notification.conversationId)
+                .getHistoryForConversationSync(testOrRealNotification.conversationId)
             
-            // Get enhanced conversation context including participants
-            val contextData = conversationManager.getConversationContext(notificationId, notification)
-            Log.d(CONVERSATION_TAG, "Retrieved conversation context: threadId=${contextData.threadId}, historySize=${contextData.historySize}")
+            // Get enhanced conversation context including participants and store result
+            val currentContextData = conversationManager.getConversationContext(notificationId, testOrRealNotification)
+            Log.d(CONVERSATION_TAG, "Retrieved conversation context: threadId=${currentContextData.threadId}, historySize=${currentContextData.historySize}")
 
             // Get active template or use default
             val template = database.geminiDao().getActiveTemplate() ?: PromptTemplate.createDefault()
@@ -374,10 +401,10 @@ class GeminiService(private val context: Context) {
             val contextString = buildString {
                 // Metadata section
                 append("Conversation Info:\n")
-                append("- Thread ID: ${contextData.threadId}\n")
-                append("- Messages: ${contextData.historySize}\n")
-                if (contextData.participants.isNotEmpty()) {
-                    append("- Participants: ${contextData.participants.joinToString(", ")}\n")
+                append("- Thread ID: ${currentContextData.threadId}\n")
+                append("- Messages: ${currentContextData.historySize}\n")
+                if (currentContextData.participants.isNotEmpty()) {
+                    append("- Participants: ${currentContextData.participants.joinToString(", ")}\n")
                 }
                 append("\n")
 
@@ -401,9 +428,17 @@ class GeminiService(private val context: Context) {
                 message = message
             )
             
-            // Get response from Gemini
-            Log.d(TAG, "Using template: ${template.name}")
-            Log.d(TAG, "Sending prompt to Gemini with context length: ${prompt.length}")
+            // Log detailed generation attempt
+            val startTime = System.currentTimeMillis()
+            Log.i(TAG, """
+                ====== GENERATING AUTO-REPLY ======
+                Template: ${template.name}
+                Context Length: ${contextString.length}
+                Message: $message
+                Thread ID: ${currentContextData.threadId}
+                History Size: ${currentContextData.historySize}
+                ================================
+            """.trimIndent())
             
             // Generate response
             val response = withContext(Dispatchers.IO) {
@@ -428,6 +463,15 @@ class GeminiService(private val context: Context) {
             }
 
             val finalResponse = fullResponse.toString().trim()
+
+            // Log successful generation
+            Log.i(TAG, """
+                ====== AUTO-REPLY GENERATED ======
+                Generated Text: $generatedText
+                Word Count: ${generatedText.split(" ").size}
+                Generation Time: ${System.currentTimeMillis() - startTime}ms
+                ================================
+            """.trimIndent())
 
             // Save conversation history
             try {
