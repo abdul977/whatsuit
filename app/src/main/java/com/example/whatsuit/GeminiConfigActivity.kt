@@ -200,24 +200,35 @@ import kotlin.coroutines.resumeWithException
                 withContext(Dispatchers.IO) {
                     geminiService.initialize()
                     
-                    // Test with sample message
-                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
-                        geminiService.generateReply(
-                            notificationId = -1,
-                            message = "Test message",
-                            object : GeminiService.ResponseCallback {
-                                override fun onPartialResponse(text: String) {}
-                                
-                                override fun onComplete(fullResponse: String) {
-                                    continuation.resume(Unit) {}
-                                }
-                                
-                                override fun onError(error: Throwable) {
-                                    continuation.resumeWithException(error)
-                                }
+                // Test with sample message in a controlled environment
+                Log.d(TAG, "Starting API test with dummy notification")
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
+                    geminiService.generateReply(
+                        notificationId = -1,
+                        message = "Test API configuration message",
+                        object : GeminiService.ResponseCallback {
+                            override fun onPartialResponse(text: String) {
+                                Log.d(TAG, "Received partial test response: $text")
                             }
-                        )
-                    }
+                            
+                            override fun onComplete(fullResponse: String) {
+                                Log.d(TAG, "API test completed successfully with response: $fullResponse")
+                                continuation.resume(Unit) {}
+                            }
+                            
+                            override fun onError(error: Throwable) {
+                                Log.e(TAG, "API test failed", error)
+                                val errorMessage = when {
+                                    error.message?.contains("unauthorized", ignoreCase = true) == true -> "Invalid API key"
+                                    error.message?.contains("network", ignoreCase = true) == true -> "Network error"
+                                    error.message?.contains("notification", ignoreCase = true) == true -> "Internal test error" // Convert notification errors to generic test error
+                                    else -> "Error: ${error.message}"
+                                }
+                                continuation.resumeWithException(RuntimeException(errorMessage, error))
+                            }
+                        }
+                    )
+                }
                 }
                 
                 // If we get here, the test was successful

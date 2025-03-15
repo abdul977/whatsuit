@@ -4,9 +4,11 @@ import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
 import androidx.room.Delete;
 import androidx.room.Insert;
+import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
 import androidx.room.Update;
 import androidx.room.Transaction;
+import androidx.room.Upsert;
 
 import java.util.List;
 
@@ -46,8 +48,8 @@ public interface NotificationDao {
     @Query("SELECT * FROM notifications GROUP BY packageName, timestamp ORDER BY timestamp DESC")
     LiveData<List<NotificationEntity>> getGroupedNotifications();
 
-    @Query("SELECT * FROM notifications WHERE id = :id")
-    LiveData<NotificationEntity> getNotificationById(long id);
+    @Query("SELECT * FROM notifications WHERE conversationId = :conversationId")
+    LiveData<NotificationEntity> getNotificationById(String conversationId);
 
     // Check if auto-reply is disabled for a specific title/chat
     @Query("SELECT EXISTS(SELECT 1 FROM notifications " +
@@ -75,19 +77,19 @@ public interface NotificationDao {
 
     // Get all related notifications with same exact phone number and same package
     @Query("SELECT * FROM notifications " +
-            "WHERE packageName = (SELECT packageName FROM notifications WHERE id = :id) " +
+            "WHERE packageName = (SELECT packageName FROM notifications WHERE conversationId = :conversationId) " +
             "AND CASE " +
             "  WHEN packageName LIKE '%whatsapp%' AND " +
             "       title LIKE '%[0-9+]%' AND " +
-            "       (SELECT title FROM notifications WHERE id = :id) LIKE '%[0-9+]%' " +
+            "       (SELECT title FROM notifications WHERE conversationId = :conversationId) LIKE '%[0-9+]%' " +
             "  THEN " +
             "    replace(replace(replace(title, '+', ''), '-', ''), ' ', '') = " +
-            "    replace(replace(replace((SELECT title FROM notifications WHERE id = :id), '+', ''), '-', ''), ' ', '') " +
+            "    replace(replace(replace((SELECT title FROM notifications WHERE conversationId = :conversationId), '+', ''), '-', ''), ' ', '') " +
             "  ELSE " +
-            "    title = (SELECT title FROM notifications WHERE id = :id) " +
+            "    title = (SELECT title FROM notifications WHERE conversationId = :conversationId) " +
             "END " +
             "ORDER BY timestamp DESC")
-    LiveData<List<NotificationEntity>> getRelatedNotifications(long id);
+    LiveData<List<NotificationEntity>> getRelatedNotifications(String conversationId);
 
     // Get related notifications within a time range
     @Query("SELECT * FROM notifications " +
@@ -187,27 +189,20 @@ public interface NotificationDao {
         return getSmartGroupedNotificationsByTimeRange("-1 day");
     }
 
-    // Get notification by ID (non-LiveData version for internal checks)
-    @Query("SELECT * FROM notifications WHERE id = :id LIMIT 1")
-    NotificationEntity getNotificationByIdSync(long id);
 
     // Get notification by thread ID
     @Query("SELECT * FROM notifications WHERE conversationId = :threadId ORDER BY timestamp DESC LIMIT 1")
     NotificationEntity getNotificationByThreadIdSync(String threadId);
 
-    // Atomic upsert operation for notifications
     @Transaction
     default long upsertNotification(NotificationEntity notification) {
         NotificationEntity existing = getNotificationByThreadIdSync(notification.getConversationId());
         if (existing != null) {
-            // Update existing notification with new content
             notification.setId(existing.getId());
             update(notification);
             return existing.getId();
-        } else {
-            // Insert new notification
-            return insert(notification);
         }
+        return insert(notification);
     }
 
     // Atomic check and update operation
@@ -215,6 +210,9 @@ public interface NotificationDao {
     default NotificationEntity getAndUpdateNotification(String threadId, NotificationEntity notification) {
         return getNotificationByThreadIdSync(threadId);
     }
+
+    @Query("SELECT * FROM notifications WHERE id = :id")
+    NotificationEntity getNotificationByIdSync(long id);
 
     // Get all notifications with smart grouping
     @androidx.room.RewriteQueriesToDropUnusedColumns

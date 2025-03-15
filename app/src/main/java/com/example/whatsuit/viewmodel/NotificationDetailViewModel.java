@@ -29,7 +29,7 @@ public class NotificationDetailViewModel extends AndroidViewModel {
     }
 
     public void loadNotification(long notificationId) {
-        database.notificationDao().getNotificationById(notificationId)
+        database.notificationDao().getNotificationById(String.valueOf(notificationId))
                 .observeForever(notification -> {
                     currentNotification.setValue(notification);
                     loadRelatedNotifications(notificationId);
@@ -38,7 +38,7 @@ public class NotificationDetailViewModel extends AndroidViewModel {
     }
 
     private void loadRelatedNotifications(long notificationId) {
-        database.notificationDao().getRelatedNotifications(notificationId)
+        database.notificationDao().getRelatedNotifications(String.valueOf(notificationId))
                 .observeForever(notifications -> {
                     relatedNotifications.setValue(notifications);
                 });

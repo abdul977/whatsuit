@@ -10,7 +10,7 @@ import androidx.room.PrimaryKey;
                 @Index(value = {"packageName", "title", "timestamp"}),
                 @Index(value = {"timestamp"}),
                 @Index(value = {"packageName"}),
-                @Index(value = {"conversationId"})
+                @Index(value = {"conversationId"}, unique = true)
         })
 public class NotificationEntity {
     @PrimaryKey(autoGenerate = true)
@@ -53,11 +53,11 @@ public class NotificationEntity {
     }
 
     // Getters and Setters
-    public String getConversationId() { return conversationId; }
-    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
-    
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
+
+    public String getConversationId() { return conversationId; }
+    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
     
     public String getPackageName() { return packageName; }
     public void setPackageName(String packageName) { this.packageName = packageName; }

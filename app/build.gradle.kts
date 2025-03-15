@@ -21,7 +21,8 @@ android {
             annotationProcessorOptions {
                 arguments += mapOf(
                     "room.schemaLocation" to "$projectDir/schemas",
-                    "room.incremental" to "true"
+                    "room.incremental" to "true",
+                    "kapt.kotlin.generated" to "true"
                 )
             }
         }
@@ -44,6 +45,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf("-Xjvm-default=all")
+    }
+    
+    buildFeatures {
+        viewBinding = true
+        dataBinding = true
     }
 
     kapt {

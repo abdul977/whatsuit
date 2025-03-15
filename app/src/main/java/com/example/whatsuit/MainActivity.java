@@ -66,11 +66,12 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import androidx.lifecycle.Observer;
 
+import com.example.whatsuit.NotificationService;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements AutoReplyProvider {
     // Animation related fields
     private boolean isAppReady = false;
     private View splashOverlay;
@@ -82,7 +83,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView emptyView;
     private NotificationDao notificationDao;
     private ConversationHistoryDao conversationHistoryDao;
-    private AutoReplyManager autoReplyManager;
+    protected AutoReplyManager autoReplyManager;
+    
+    public AutoReplyManager getAutoReplyManager() {
+        return autoReplyManager;
+    }
     private androidx.appcompat.widget.Toolbar toolbar;
     private FloatingActionButton fab;
     private AppBarLayout appBarLayout;

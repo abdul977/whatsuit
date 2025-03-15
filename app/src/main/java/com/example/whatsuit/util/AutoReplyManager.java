@@ -6,19 +6,20 @@ import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.lang.ref.WeakReference;
 
 public class AutoReplyManager {
-    private final Context context;
-    private final ExecutorService executor;
-    private NotificationEntity currentNotification;
-    private MenuItem autoReplyMenuItem;
+    private WeakReference<Context> contextRef;
+    private volatile ExecutorService executor;
+    private volatile NotificationEntity currentNotification;
+    private volatile MenuItem autoReplyMenuItem;
 
     public interface AutoReplyCallback {
         void onStatusChanged(boolean isDisabled);
     }
 
     public AutoReplyManager(Context context) {
-        this.context = context;
+        this.contextRef = new WeakReference<>(context);
         this.executor = Executors.newSingleThreadExecutor();
     }
 
@@ -36,6 +37,8 @@ public class AutoReplyManager {
             ExtractedInfo info = extractIdentifierInfo(currentNotification);
             
             executor.execute(() -> {
+                Context context = contextRef.get();
+                if (context == null) return;
                 boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
                     .isAutoReplyDisabled(currentNotification.getPackageName(), 
                                      info.phoneNumber, 
@@ -54,6 +57,8 @@ public class AutoReplyManager {
 
     public void toggleAutoReply(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
         executor.execute(() -> {
+            Context context = contextRef.get();
+            if (context == null) return;
             AppDatabase db = AppDatabase.getDatabase(context);
             boolean currentState = db.notificationDao()
                 .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
@@ -67,6 +72,8 @@ public class AutoReplyManager {
 
     public void isAutoReplyDisabled(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
         executor.execute(() -> {
+            Context context = contextRef.get();
+            if (context == null) return;
             boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
                 .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
             
@@ -110,6 +117,20 @@ public class AutoReplyManager {
     }
 
     public void shutdown() {
-        executor.shutdown();
+        ExecutorService executorToShutdown = executor;
+        if (executorToShutdown != null) {
+            try {
+                // First attempt to finish any pending operations
+                executorToShutdown.submit(() -> {}).get();
+                executorToShutdown.shutdown();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            executor = null;
+        }
+        // Clear references
+        contextRef.clear();
+        currentNotification = null;
+        autoReplyMenuItem = null;
     }
 }

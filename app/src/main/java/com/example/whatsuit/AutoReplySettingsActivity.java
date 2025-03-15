@@ -13,6 +13,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.whatsuit.adapter.AppSettingsAdapter;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppSettingEntity;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +33,10 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
 
     // Package name for default app
     private static final String DEFAULT_APP = "com.whatsapp.w4b"; // WhatsApp Business
+
+    // Add this constant
+    private static final String PREF_THROTTLE_DELAY = "auto_reply_throttle_delay_ms";
+    private static final int DEFAULT_THROTTLE_DELAY_MS = 1000; // Default to 1 second instead of 5
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,6 +86,37 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
             Toast.makeText(this, 
                 isChecked ? "Auto-reply for groups enabled" : "Auto-reply for groups disabled", 
                 Toast.LENGTH_SHORT).show();
+        });
+
+        // Add slider for throttle delay
+        SeekBar throttleDelaySeekBar = findViewById(R.id.throttleDelaySeekBar);
+        TextView throttleDelayValue = findViewById(R.id.throttleDelayValue);
+
+        // Set up the slider with current value
+        int currentDelay = prefs.getInt(PREF_THROTTLE_DELAY, DEFAULT_THROTTLE_DELAY_MS);
+        throttleDelaySeekBar.setMax(5000); // Max 5 seconds
+        throttleDelaySeekBar.setProgress(currentDelay);
+        throttleDelayValue.setText(String.format("%d ms", currentDelay));
+
+        // Update when changed
+        throttleDelaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // Ensure minimum value of 500ms
+                int value = Math.max(500, progress);
+                throttleDelayValue.setText(String.format("%d ms", value));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                int value = Math.max(500, seekBar.getProgress());
+                prefs.edit().putInt(PREF_THROTTLE_DELAY, value).apply();
+                Toast.makeText(AutoReplySettingsActivity.this, 
+                    "Auto-reply throttle set to " + value + " ms", Toast.LENGTH_SHORT).show();
+            }
         });
 
         // Setup RecyclerViews
@@ -197,7 +234,24 @@ public class AutoReplySettingsActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (executorService != null) {
-            executorService.shutdown();
+            // Wait for pending tasks to complete and shutdown
+            try {
+                // Submit any remaining updates
+                executorService.submit(() -> {}).get();
+                executorService.shutdown();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            executorService = null;
         }
+        // Clear adapters to prevent memory leaks
+        if (defaultAppsRecyclerView != null) {
+            defaultAppsRecyclerView.setAdapter(null);
+        }
+        if (appSettingsRecyclerView != null) {
+            appSettingsRecyclerView.setAdapter(null);
+        }
+        defaultAppsAdapter = null;
+        otherAppsAdapter = null;
     }
 }

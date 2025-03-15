@@ -18,7 +18,7 @@ import com.example.whatsuit.viewmodel.NotificationDetailViewModel;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
-public class NotificationDetailActivity extends AppCompatActivity {
+public class NotificationDetailActivity extends AppCompatActivity implements AutoReplyProvider {
     private TextView appNameTextView;
     private TextView titleTextView;
     private NotificationDetailViewModel viewModel;
@@ -72,6 +72,11 @@ public class NotificationDetailActivity extends AppCompatActivity {
             viewModel.filterNotificationsByTimeRange(startTime, endTime));
 
         autoReplyManager = new AutoReplyManager(this);
+    }
+
+    @Override
+    public AutoReplyManager getAutoReplyManager() {
+        return autoReplyManager;
     }
 
     private void setupViewPager() {
@@ -153,11 +158,40 @@ public class NotificationDetailActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Cleanup AutoReplyManager
         if (autoReplyManager != null) {
             autoReplyManager.shutdown();
+            autoReplyManager = null;
         }
+
+        // Clear view model observers
+        if (viewModel != null) {
+            viewModel.getCurrentNotification().removeObservers(this);
+        }
+
+        // Release ViewPager2 resources
         if (viewPager != null) {
             viewPager.setAdapter(null);
+            viewPager = null;
         }
+
+        // Clear TabLayout
+        if (tabLayout != null) {
+            tabLayout.removeAllTabs();
+            tabLayout = null;
+        }
+
+        // Cleanup fragment references
+        if (pagerAdapter != null) {
+            pagerAdapter = null;
+        }
+
+        // Clear UI references
+        titleTextView = null;
+        appNameTextView = null;
+        
+        // Clear helper references
+        timeFilterHelper = null;
+        viewModel = null;
     }
 }

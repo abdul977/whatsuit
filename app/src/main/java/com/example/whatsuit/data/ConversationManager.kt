@@ -2,6 +2,7 @@ package com.example.whatsuit.data
 
 import android.content.Context
 import android.util.Log
+import com.example.whatsuit.data.NotificationEntity
 
 class ConversationManager(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
@@ -15,10 +16,10 @@ class ConversationManager(private val context: Context) {
         val lastActivity: Long
     )
 
-    suspend fun getConversationContext(notificationId: Long): ConversationContext {
+    suspend fun getConversationContext(notificationId: Long, cachedNotification: NotificationEntity? = null): ConversationContext {
         Log.d(TAG, "Getting conversation context for notification: $notificationId")
         
-        val notification = database.notificationDao().getNotificationByIdSync(notificationId)
+        val notification = cachedNotification ?: database.notificationDao().getNotificationByIdSync(notificationId)
         val history = database.geminiDao().getThreadedConversationHistory(notificationId, 50)
         
         Log.d(TAG, "Found ${history.size} history entries for conversation: ${notification?.conversationId}")
