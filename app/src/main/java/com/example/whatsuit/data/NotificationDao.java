@@ -214,6 +214,9 @@ public interface NotificationDao {
     @Query("SELECT * FROM notifications WHERE id = :id")
     NotificationEntity getNotificationByIdSync(long id);
 
+    @Query("SELECT * FROM notifications WHERE id = :id")
+    LiveData<NotificationEntity> getNotificationByIdNumeric(long id);
+
     @Query("SELECT * FROM notifications " +
            "WHERE conversationId = :conversationId " +
            "AND timestamp >= :startTime " +

@@ -5,18 +5,20 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.viewpager2.widget.ViewPager2;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.whatsuit.adapter.DetailPagerAdapter;
+import com.example.whatsuit.adapter.ConversationHistoryAdapter;
+import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.util.AutoReplyManager;
 import com.example.whatsuit.util.TimeFilterHelper;
 import com.example.whatsuit.viewmodel.NotificationDetailViewModel;
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
 
 public class NotificationDetailActivity extends AppCompatActivity implements AutoReplyProvider {
     private TextView appNameTextView;
@@ -24,27 +26,43 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     private NotificationDetailViewModel viewModel;
     private TimeFilterHelper timeFilterHelper;
     private AutoReplyManager autoReplyManager;
-    private ViewPager2 viewPager;
-    private TabLayout tabLayout;
-    private DetailPagerAdapter pagerAdapter;
+    private RecyclerView conversationRecyclerView;
+    private ConversationHistoryAdapter conversationAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        android.util.Log.d(TAG, "onCreate - starting");
+        
+        // Postpone transitions until content is ready
+        android.util.Log.d(TAG, "postponing enter transition");
+        postponeEnterTransition();
+        
         setContentView(R.layout.activity_notification_detail);
 
         initializeViews();
         setupViewModel();
         setupHelpers();
-        setupViewPager();
+        setupConversationHistory();
         handleIntent(getIntent());
+
+        // Start transition once content is ready
+        View rootView = findViewById(android.R.id.content);
+        rootView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                rootView.getViewTreeObserver().removeOnPreDrawListener(this);
+                android.util.Log.d(TAG, "starting postponed enter transition");
+                startPostponedEnterTransition();
+                return true;
+            }
+        });
     }
 
     private void initializeViews() {
         titleTextView = findViewById(R.id.titleTextView);
         appNameTextView = findViewById(R.id.appNameTextView);
-        viewPager = findViewById(R.id.viewPager);
-        tabLayout = findViewById(R.id.tabLayout);
+        conversationRecyclerView = findViewById(R.id.conversationRecyclerView);
 
         // Set up toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -62,9 +80,70 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
                 setTitle(notification.getAppName());
                 autoReplyManager.setCurrentNotification(notification);
             } else {
+                android.util.Log.e(TAG, "Notification data is null - invalid notification ID or database error");
+                android.widget.Toast.makeText(
+                    this,
+                    "Could not load notification details",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show();
                 finish();
             }
         });
+    }
+
+    private void setupConversationHistory() {
+        conversationAdapter = new ConversationHistoryAdapter();
+        conversationRecyclerView.setAdapter(conversationAdapter);
+        conversationRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        // Set up FAB click listener
+        findViewById(R.id.fabAddConversation).setOnClickListener(v -> showAddConversationDialog());
+
+        // Set up edit listener
+        conversationAdapter.setOnEditClickListener(conversation -> {
+            showEditConversationDialog(conversation);
+            return kotlin.Unit.INSTANCE;
+        });
+
+        // Observe conversation history changes
+        viewModel.getConversationHistory().observe(this, conversations -> {
+            if (conversations != null) {
+                conversationAdapter.submitList(conversations);
+            }
+        });
+    }
+
+    private void handleIntent(Intent intent) {
+        try {
+            Uri data = intent.getData();
+            if (data != null && "whatsuit".equals(data.getScheme())) {
+                String notificationId = data.getLastPathSegment();
+                if (notificationId != null) {
+                    android.util.Log.d(TAG, "Loading notification from URI: " + notificationId);
+                    viewModel.loadNotification(Long.parseLong(notificationId));
+                } else {
+                    throw new IllegalArgumentException("Missing notification ID in URI");
+                }
+            } else if (intent.hasExtra("notification_id")) {
+                long notificationId = intent.getLongExtra("notification_id", -1);
+                if (notificationId != -1) {
+                    android.util.Log.d(TAG, "Loading notification from intent extra: " + notificationId);
+                    viewModel.loadNotification(notificationId);
+                } else {
+                    throw new IllegalArgumentException("Invalid notification ID in intent extra");
+                }
+            } else {
+                throw new IllegalArgumentException("No notification ID provided");
+            }
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error handling intent: " + e.getMessage());
+            android.widget.Toast.makeText(
+                this,
+                "Error opening notification details",
+                android.widget.Toast.LENGTH_SHORT
+            ).show();
+            finish();
+        }
     }
 
     private void setupHelpers() {
@@ -79,50 +158,12 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
         return autoReplyManager;
     }
 
-    private void setupViewPager() {
-        pagerAdapter = new DetailPagerAdapter(this);
-        viewPager.setAdapter(pagerAdapter);
-
-        new TabLayoutMediator(tabLayout, viewPager,
-            (tab, position) -> {
-                switch (position) {
-                    case DetailPagerAdapter.POSITION_NOTIFICATIONS:
-                        tab.setText(R.string.tab_notifications);
-                        break;
-                    case DetailPagerAdapter.POSITION_CONVERSATIONS:
-                        tab.setText(R.string.tab_conversations);
-                        break;
-                }
-            }
-        ).attach();
-    }
+    private static final String TAG = "NotificationDetailActivity";
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleIntent(intent);
-    }
-
-    private void handleIntent(Intent intent) {
-        Uri data = intent.getData();
-        if (data != null && "whatsuit".equals(data.getScheme())) {
-            String notificationId = data.getLastPathSegment();
-            if (notificationId != null) {
-                try {
-                    viewModel.loadNotification(Long.parseLong(notificationId));
-                } catch (NumberFormatException e) {
-                    e.printStackTrace();
-                    finish();
-                }
-            }
-        } else if (intent.hasExtra("notification_id")) {
-            long notificationId = intent.getLongExtra("notification_id", -1);
-            if (notificationId != -1) {
-                viewModel.loadNotification(notificationId);
-            }
-        } else {
-            finish();
-        }
     }
 
     @Override
@@ -155,9 +196,70 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
         return super.onOptionsItemSelected(item);
     }
 
+    private void showAddConversationDialog() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_conversation, null);
+        
+        android.widget.EditText messageEditText = dialogView.findViewById(R.id.messageEditText);
+        android.widget.EditText responseEditText = dialogView.findViewById(R.id.responseEditText);
+        android.widget.Button cancelButton = dialogView.findViewById(R.id.cancelButton);
+        android.widget.Button addButton = dialogView.findViewById(R.id.addButton);
+        
+        android.app.AlertDialog dialog = builder.setView(dialogView).create();
+        
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+        
+        addButton.setOnClickListener(v -> {
+            String message = messageEditText.getText().toString().trim();
+            String response = responseEditText.getText().toString().trim();
+            
+            if (!message.isEmpty() || !response.isEmpty()) {
+                viewModel.createConversation(message, response);
+                dialog.dismiss();
+            }
+        });
+        
+        dialog.show();
+    }
+
+    private void showEditConversationDialog(ConversationHistory conversation) {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_conversation, null);
+        
+        android.widget.EditText messageEditText = dialogView.findViewById(R.id.messageEditText);
+        android.widget.EditText responseEditText = dialogView.findViewById(R.id.responseEditText);
+        
+        messageEditText.setText(conversation.getMessage());
+        responseEditText.setText(conversation.getResponse());
+        
+        builder.setView(dialogView)
+               .setTitle("Edit Conversation")
+               .setPositiveButton("Save", (dialog, which) -> {
+                   String message = messageEditText.getText().toString().trim();
+                   String response = responseEditText.getText().toString().trim();
+                   
+                   if (!message.isEmpty() || !response.isEmpty()) {
+                       viewModel.editConversation(conversation, message, response);
+                   }
+               })
+               .setNegativeButton("Cancel", null)
+               .show();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Clean up any popups/menus when activity loses focus
+        if (conversationAdapter != null) {
+            conversationAdapter.cleanup();
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        android.util.Log.d(TAG, "Activity destroying, cleaning up resources");
+        
         // Cleanup AutoReplyManager
         if (autoReplyManager != null) {
             autoReplyManager.shutdown();
@@ -167,30 +269,24 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
         // Clear view model observers
         if (viewModel != null) {
             viewModel.getCurrentNotification().removeObservers(this);
+            viewModel.getConversationHistory().removeObservers(this);
         }
 
-        // Release ViewPager2 resources
-        if (viewPager != null) {
-            viewPager.setAdapter(null);
-            viewPager = null;
+        // Clear RecyclerView
+        if (conversationRecyclerView != null) {
+            conversationRecyclerView.setAdapter(null);
+            conversationRecyclerView = null;
         }
 
-        // Clear TabLayout
-        if (tabLayout != null) {
-            tabLayout.removeAllTabs();
-            tabLayout = null;
+        // Clean up adapter
+        if (conversationAdapter != null) {
+            conversationAdapter.cleanup();
+            conversationAdapter = null;
         }
 
-        // Cleanup fragment references
-        if (pagerAdapter != null) {
-            pagerAdapter = null;
-        }
-
-        // Clear UI references
+        // Clear all references
         titleTextView = null;
         appNameTextView = null;
-        
-        // Clear helper references
         timeFilterHelper = null;
         viewModel = null;
     }

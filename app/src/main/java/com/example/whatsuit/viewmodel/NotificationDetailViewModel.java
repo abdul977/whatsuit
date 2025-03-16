@@ -18,6 +18,11 @@ public class NotificationDetailViewModel extends AndroidViewModel {
     private final MutableLiveData<List<NotificationEntity>> relatedNotifications;
     private final MutableLiveData<List<ConversationHistory>> conversations;
     private final Executor executor;
+    private final MutableLiveData<Boolean> isAddingConversation;
+    
+    private LiveData<NotificationEntity> notificationObserver;
+    private LiveData<List<NotificationEntity>> relatedNotificationsObserver;
+    private LiveData<List<ConversationHistory>> conversationsObserver;
 
     public NotificationDetailViewModel(Application application) {
         super(application);
@@ -26,30 +31,44 @@ public class NotificationDetailViewModel extends AndroidViewModel {
         relatedNotifications = new MutableLiveData<>();
         conversations = new MutableLiveData<>();
         executor = Executors.newSingleThreadExecutor();
+        isAddingConversation = new MutableLiveData<>(false);
     }
 
+    private androidx.lifecycle.Observer<NotificationEntity> notificationObserverCallback;
+    private androidx.lifecycle.Observer<List<NotificationEntity>> relatedNotificationsObserverCallback;
+    private androidx.lifecycle.Observer<List<ConversationHistory>> conversationsObserverCallback;
+
     public void loadNotification(long notificationId) {
-        database.notificationDao().getNotificationById(String.valueOf(notificationId))
-                .observeForever(notification -> {
-                    currentNotification.setValue(notification);
-                    loadRelatedNotifications(notificationId);
-                    loadConversations(notificationId);
-                });
+        // Remove previous observers
+        cleanupObservers();
+
+        // Set up new observers with stored callbacks for proper cleanup
+        notificationObserverCallback = notification -> {
+            if (notification != null) {
+                currentNotification.setValue(notification);
+                loadRelatedNotifications(notificationId);
+                loadConversations(notificationId);
+            } else {
+                // Handle null notification case
+                currentNotification.setValue(null);
+            }
+        };
+        notificationObserver = database.notificationDao().getNotificationByIdNumeric(notificationId);
+        notificationObserver.observeForever(notificationObserverCallback);
     }
 
     private void loadRelatedNotifications(long notificationId) {
-        database.notificationDao().getRelatedNotifications(String.valueOf(notificationId))
-                .observeForever(notifications -> {
-                    relatedNotifications.setValue(notifications);
-                });
+        relatedNotificationsObserverCallback = notifications -> 
+            relatedNotifications.setValue(notifications != null ? notifications : java.util.Collections.emptyList());
+        relatedNotificationsObserver = database.notificationDao().getRelatedNotifications(String.valueOf(notificationId));
+        relatedNotificationsObserver.observeForever(relatedNotificationsObserverCallback);
     }
 
     private void loadConversations(long notificationId) {
-        database.getConversationHistoryDao()
-               .getHistoryForNotification(notificationId)
-               .observeForever(history -> {
-                   conversations.setValue(history);
-               });
+        conversationsObserverCallback = history -> 
+            conversations.setValue(history != null ? history : java.util.Collections.emptyList());
+        conversationsObserver = database.getConversationHistoryDao().getHistoryForNotification(notificationId);
+        conversationsObserver.observeForever(conversationsObserverCallback);
     }
 
     public void editConversation(ConversationHistory conversation, String newMessage, String newResponse) {
@@ -105,13 +124,76 @@ public class NotificationDetailViewModel extends AndroidViewModel {
         return relatedNotifications;
     }
 
-    public LiveData<List<ConversationHistory>> getConversations() {
+    public LiveData<List<ConversationHistory>> getConversationHistory() {
         return conversations;
+    }
+
+    public LiveData<Boolean> isAddingConversation() {
+        return isAddingConversation;
+    }
+
+    public void setAddingConversation(boolean isAdding) {
+        isAddingConversation.setValue(isAdding);
+    }
+
+    public void createConversation(String message, String response) {
+        NotificationEntity notification = currentNotification.getValue();
+        if (notification == null) return;
+
+        String conversationId = String.valueOf(notification.getId());
+        ConversationHistory conversation = new ConversationHistory(
+            false,           // isModified
+            null,           // analysis
+            null,           // analysisTimestamp
+            conversationId, // conversationId
+            response,       // response
+            notification.getId(), // notificationId
+            0,             // id (auto-generated)
+            message,       // message
+            System.currentTimeMillis()  // timestamp
+        );
+
+        executor.execute(() -> {
+            try {
+                database.getConversationHistoryDao().insertSync(conversation);
+                // Update LiveData on the main thread
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    loadConversations(notification.getId());
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Handle error if needed
+            }
+        });
+    }
+
+    private void cleanupObservers() {
+        if (notificationObserver != null && notificationObserverCallback != null) {
+            notificationObserver.removeObserver(notificationObserverCallback);
+        }
+        if (relatedNotificationsObserver != null && relatedNotificationsObserverCallback != null) {
+            relatedNotificationsObserver.removeObserver(relatedNotificationsObserverCallback);
+        }
+        if (conversationsObserver != null && conversationsObserverCallback != null) {
+            conversationsObserver.removeObserver(conversationsObserverCallback);
+        }
     }
 
     @Override
     protected void onCleared() {
         super.onCleared();
-        // Clean up observers
+        
+        // Cancel background tasks
+        if (executor instanceof java.util.concurrent.ExecutorService) {
+            ((java.util.concurrent.ExecutorService) executor).shutdown();
+        }
+
+        // Clean up all observers
+        cleanupObservers();
+
+        // Clear any stored data
+        currentNotification.setValue(null);
+        relatedNotifications.setValue(null);
+        conversations.setValue(null);
     }
 }

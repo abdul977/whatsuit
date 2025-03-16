@@ -42,6 +42,7 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     private final Map<GroupKey, List<NotificationEntity>> groupedNotifications = new HashMap<>();
     private final AutoReplyManager autoReplyManager;
     private final Handler mainHandler;
+    private PopupMenu activePopupMenu;
 
     public GroupedNotificationAdapter(PackageManager packageManager, AutoReplyManager autoReplyManager) {
         this.packageManager = packageManager;
@@ -110,12 +111,19 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     private void showPopupMenu(View view, NotificationEntity notification) {
+        if (activePopupMenu != null) {
+            activePopupMenu.dismiss();
+        }
+
         PopupMenu popup = new PopupMenu(view.getContext(), view);
+        activePopupMenu = popup;
         MenuInflater inflater = popup.getMenuInflater();
         inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
 
         MenuItem autoReplyItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
         autoReplyItem.setEnabled(false);
+
+    popup.setOnDismissListener(menu -> activePopupMenu = null);
         ExtractedInfo info = extractIdentifierInfo(notification);
         
         autoReplyManager.isAutoReplyDisabled(notification.getPackageName(), info.phoneNumber, info.titlePrefix,
@@ -131,6 +139,7 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             } else if (item.getItemId() == R.id.action_view_details) {
                 Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
                 intent.putExtra("notification_id", notification.getId());
+                intent.putExtra("show_conversations_tab", true);
                 view.getContext().startActivity(intent);
                 return true;
             } else if (item.getItemId() == R.id.action_view_history) {
@@ -414,6 +423,18 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
             menuButton = itemView.findViewById(R.id.menuButton);
             autoReplyStatusChip = itemView.findViewById(R.id.autoReplyStatusChip);
         }
+    }
+
+    private static final String TAG = "GroupedNotificationAdapter";
+
+    public void cleanup() {
+        android.util.Log.d(TAG, "cleanup started");
+        if (activePopupMenu != null) {
+            android.util.Log.d(TAG, "dismissing active popup menu");
+            activePopupMenu.dismiss();
+            activePopupMenu = null;
+        }
+        android.util.Log.d(TAG, "cleanup completed");
     }
 
     static class NotificationDiffCallback extends DiffUtil.Callback {
