@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.motion.widget.MotionLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:background="@color/white"
+    android:minHeight="48dp"
+    app:layoutDescription="@xml/notification_filters_scene">
+
+    <HorizontalScrollView
+        android:id="@+id/filtersScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/timeFilterChipGroup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:paddingVertical="4dp"
+            app:singleSelection="true"
+            app:selectionRequired="true"
+            app:chipSpacingHorizontal="6dp">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/todayChip"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="Today"
+            android:textSize="14sp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:stateListAnimator="@animator/chip_scale_enter"/>
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/yesterdayChip"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="Yesterday" 
+            android:textSize="14sp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:stateListAnimator="@animator/chip_scale_enter"/>
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/allTimeChip"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="All"
+            android:textSize="14sp"
+            android:checked="true"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:stateListAnimator="@animator/chip_scale_enter"/>
+
+    </com.google.android.material.chip.ChipGroup>
+
+    </HorizontalScrollView>
+
+    <View
+        android:id="@+id/divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?android:attr/listDivider"
+        android:layout_marginVertical="8dp"
+        app:layout_constraintTop_toBottomOf="@id/filtersScrollView"/>
+
+    <ImageButton
+        android:id="@+id/sortButton"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginTop="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Sort options"
+        android:src="@drawable/ic_filter"
+        android:tint="?attr/colorControlNormal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/divider"/>
+
+</androidx.constraintlayout.motion.widget.MotionLayout>

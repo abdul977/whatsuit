@@ -14,29 +14,35 @@
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/white"
-        android:elevation="0dp">
+        android:background="?attr/colorSurface"
+        app:elevation="0dp">
 
-        <androidx.appcompat.widget.Toolbar
+        <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="@color/white"
+            app:titleCentered="true"
             app:title="@string/app_name"
-            app:titleTextColor="@color/black"
-            style="@style/ChatToolbarStyle"/>
+            app:titleTextAppearance="@style/TextAppearance.Material3.HeadlineMedium" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            app:tabMode="fixed"
+            app:tabGravity="fill"
+            app:tabTextAppearance="@style/TextAppearance.Material3.BodyMedium"
+            app:tabIndicatorFullWidth="false"
+            app:tabInlineLabel="true" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/notificationsRecyclerView"
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingBottom="80dp"
-        android:background="@color/md_theme_background"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior"
-        tools:listitem="@layout/item_notification" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <TextView
         android:id="@+id/emptyView"
@@ -47,6 +53,9 @@
         android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
         android:textColor="@color/md_theme_onSurfaceVariant"
         android:visibility="gone"
+        android:padding="16dp"
+        android:gravity="center"
+        android:layout_margin="16dp"
         tools:visibility="visible" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -56,8 +65,8 @@
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
-        android:src="@drawable/ic_add"
-        app:tint="@color/white"
-        style="@style/ChatFabStyle"/>
+        app:srcCompat="@drawable/ic_add"
+        android:contentDescription="Add new item"
+        app:layout_behavior="com.google.android.material.behavior.HideBottomViewOnScrollBehavior" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

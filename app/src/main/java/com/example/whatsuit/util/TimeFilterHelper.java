@@ -35,11 +35,11 @@ public class TimeFilterHelper {
         final TextInputEditText startDateInput = filterDialog.findViewById(R.id.startDateInput);
         final TextInputEditText endDateInput = filterDialog.findViewById(R.id.endDateInput);
 
-        filterDialog.findViewById(R.id.applyButton).setOnClickListener(v -> {
+        filterDialog.findViewById(R.id.apply_button).setOnClickListener(v -> {
             applyTimeFilter(timeFilterGroup.getCheckedRadioButtonId());
         });
 
-        filterDialog.findViewById(R.id.cancelButton).setOnClickListener(v -> {
+        filterDialog.findViewById(R.id.cancel_button).setOnClickListener(v -> {
             filterDialog.dismiss();
         });
 

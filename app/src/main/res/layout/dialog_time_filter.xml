@@ -105,17 +105,19 @@
         android:gravity="end"
         android:layout_marginTop="16dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/cancelButton"
+        <Button
+            android:id="@+id/cancel_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Cancel"
-            style="@style/Widget.MaterialComponents.Button.TextButton"/>
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:text="Cancel"/>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/applyButton"
+        <Button
+            android:id="@+id/apply_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            style="@style/Widget.MaterialComponents.Button"
             android:text="Apply"/>
 
     </LinearLayout>
