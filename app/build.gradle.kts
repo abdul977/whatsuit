@@ -99,9 +99,6 @@ dependencies {
     // Splash Screen & Animations
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.core:core-animation:1.0.0-alpha02")
-    
-    // Fragment KTX
-    implementation("androidx.fragment:fragment-ktx:1.6.2")
 
     
     // Testing

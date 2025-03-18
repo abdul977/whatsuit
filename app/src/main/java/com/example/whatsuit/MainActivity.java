@@ -41,26 +41,17 @@ import androidx.core.graphics.Insets;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
-import com.example.whatsuit.fragment.NotificationsFragment;
-import com.example.whatsuit.fragment.ConversationsFragment;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import androidx.viewpager2.widget.ViewPager2;
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
 
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
 import com.example.whatsuit.viewmodel.NotificationsViewModel;
 import com.example.whatsuit.data.ConversationHistory;
 import com.example.whatsuit.service.GeminiService;
-import com.example.whatsuit.util.FallDownItemAnimator;
 import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistoryDao;
@@ -79,7 +70,6 @@ import com.example.whatsuit.NotificationService;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements AutoReplyProvider {
     // Animation related fields
@@ -94,8 +84,6 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     private NotificationDao notificationDao;
     private ConversationHistoryDao conversationHistoryDao;
     protected AutoReplyManager autoReplyManager;
-    private ViewPager2 viewPager;
-    private TabLayout tabLayout;
     
     public AutoReplyManager getAutoReplyManager() {
         return autoReplyManager;
@@ -333,68 +321,11 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         // Initialize ViewModel
         notificationsViewModel = new ViewModelProvider(this).get(NotificationsViewModel.class);
         
-        // Set up ViewPager2 and TabLayout
-        viewPager = findViewById(R.id.viewPager);
-        tabLayout = findViewById(R.id.tabLayout);
-
-        
-        ViewPagerAdapter viewPagerAdapter = new ViewPagerAdapter(this);
-        viewPagerAdapter.addFragment(new NotificationsFragment(), "Notifications");
-        viewPagerAdapter.addFragment(new ConversationsFragment(), "Conversations");
-        viewPager.setAdapter(viewPagerAdapter);
-        
-        // Connect TabLayout with ViewPager2
-        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
-            tab.setText(position == 0 ? "Notifications" : "Conversations");
-        }).attach();
-        
-        // Change FAB icon based on current page
-        viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
-            @Override
-            public void onPageSelected(int position) {
-                super.onPageSelected(position);
-                fab.setImageResource(position == 0 ? R.drawable.ic_filter : R.drawable.ic_add);
-                fab.setContentDescription(position == 0 ? "Filter notifications" : "Add conversation");
-            }
-        });
-
-        // Set up App Header RecyclerView with animations
-        RecyclerView appHeaderRecyclerView = findViewById(R.id.appHeaderRecyclerView);
-        AppHeaderAdapter appHeaderAdapter = new AppHeaderAdapter(getPackageManager());
-        appHeaderRecyclerView.setAdapter(appHeaderAdapter);
-        appHeaderRecyclerView.setItemAnimator(new FallDownItemAnimator());
-        FallDownItemAnimator.setAnimation(appHeaderRecyclerView);
-
-        // Set up Notifications RecyclerView with animations
-        recyclerView.setItemAnimator(new FallDownItemAnimator());
-        FallDownItemAnimator.setAnimation(recyclerView);
-
-        // Set up filters with MotionLayout transitions
-        ChipGroup timeFilterChipGroup = findViewById(R.id.timeFilterChipGroup);
-        Chip todayChip = findViewById(R.id.todayChip);
-        Chip yesterdayChip = findViewById(R.id.yesterdayChip);
-        Chip allTimeChip = findViewById(R.id.allTimeChip);
-        ChipGroup sortOrderGroup = findViewById(R.id.sortOrderGroup);
-
-        // Handle time filter clicks
-        timeFilterChipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) return;
-            String filter = "all";
-            if (checkedIds.get(0) == todayChip.getId()) {
-                filter = "today";
-            } else if (checkedIds.get(0) == yesterdayChip.getId()) {
-                filter = "yesterday";
-            }
-            notificationsViewModel.setTimeFilter(filter);
-        });
-
-        // Handle sort order changes using ChipGroup listener
-        sortOrderGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId != -1) {  // -1 means no selection
-                String sortOrder = checkedId == R.id.sort_latest ? "latest" : "most_conversations";
-                notificationsViewModel.setSortOrder(sortOrder);
-            }
-        });
+        // Set up RecyclerView
+        recyclerView = findViewById(R.id.notificationsRecyclerView);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
+        recyclerView.setAdapter(notificationAdapter);
 
         // Set up empty view
         emptyView = findViewById(R.id.emptyView);
@@ -409,49 +340,16 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         }
 
         // Observe notifications
-        notificationsViewModel.getCategorizedNotifications().observe(this, categorizedNotifications -> {
-            if (categorizedNotifications != null && !categorizedNotifications.isEmpty()) {
-                // Update app headers
-                List<AppHeaderAdapter.AppHeader> headers = new ArrayList<>();
-                headers.add(new AppHeaderAdapter.AppHeader("", "All Apps", 0));
-                
-                int totalNotifications = 0;
-                for (Map.Entry<String, List<NotificationEntity>> entry : categorizedNotifications.entrySet()) {
-                    String appName = entry.getKey();
-                    List<NotificationEntity> notifications = entry.getValue();
-                    if (!notifications.isEmpty()) {
-                        NotificationEntity firstNotification = notifications.get(0);
-                        headers.add(new AppHeaderAdapter.AppHeader(
-                            firstNotification.getPackageName(),
-                            appName,
-                            notifications.size()
-                        ));
-                        totalNotifications += notifications.size();
-                    }
-                }
-                // Update "All Apps" count
-                headers.get(0).count = totalNotifications;
-                appHeaderAdapter.setHeaders(headers);
-
-                // Update notifications list
-                List<NotificationEntity> allNotifications = new ArrayList<>();
-                for (List<NotificationEntity> notifications : categorizedNotifications.values()) {
-                    allNotifications.addAll(notifications);
-                }
-                notificationAdapter.updateNotifications(allNotifications);
+        notificationsViewModel.getFilteredNotifications().observe(this, notifications -> {
+            if (notifications != null && !notifications.isEmpty()) {
+                notificationAdapter.updateNotifications(notifications);
                 emptyView.setVisibility(View.GONE);
                 recyclerView.setVisibility(View.VISIBLE);
             } else {
-                appHeaderAdapter.setHeaders(List.of(new AppHeaderAdapter.AppHeader("", "All Apps", 0)));
                 notificationAdapter.updateNotifications(new ArrayList<>());
                 emptyView.setVisibility(View.VISIBLE);
                 recyclerView.setVisibility(View.GONE);
             }
-        });
-
-        // Handle app header clicks
-        appHeaderAdapter.setOnAppHeaderClickListener(header -> {
-            notificationsViewModel.setSelectedApp(header.packageName.isEmpty() ? null : header.packageName);
         });
     }
 
@@ -726,58 +624,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     }
 
     private void showNewMessageDialog() {
-        if (viewPager.getCurrentItem() == 0) {
-            showFilterDialog();
-        } else {
-            showAddConversationDialog();
-        }
-    }
-
-    private void showFilterDialog() {
-        TimeFilterHelper timeFilterHelper = new TimeFilterHelper(this, 
-            (startTime, endTime) -> notificationsViewModel.setCustomTimeFilter(startTime, endTime));
-        timeFilterHelper.showTimeFilterDialog();
-    }
-
-    private void showAddConversationDialog() {
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_conversation, null);
-        new AlertDialog.Builder(this)
-            .setTitle("New Conversation")
-            .setView(dialogView)
-            .setPositiveButton("Create", (dialog, which) -> {
-                // Implementation coming in future update
-                Toast.makeText(this, "Creating new conversation...", Toast.LENGTH_SHORT).show();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private class ViewPagerAdapter extends FragmentStateAdapter {
-        private final List<Fragment> fragments = new ArrayList<>();
-        private final List<String> fragmentTitles = new ArrayList<>();
-
-        public ViewPagerAdapter(FragmentActivity fa) {
-            super(fa);
-        }
-
-        public void addFragment(Fragment fragment, String title) {
-            fragments.add(fragment);
-            fragmentTitles.add(title);
-        }
-
-        public String getTitle(int position) {
-            return fragmentTitles.get(position);
-        }
-
-        @Override
-        public Fragment createFragment(int position) {
-            return fragments.get(position);
-        }
-
-        @Override
-        public int getItemCount() {
-            return fragments.size();
-        }
+        // TODO: Implement new message dialog
+        Toast.makeText(this, "New message feature coming soon", Toast.LENGTH_SHORT).show();
     }
 
     private void loadNotifications() {
@@ -1088,53 +936,5 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         if (autoReplyManager != null) {
             autoReplyManager.shutdown();
         }
-    }
-
-    // In the setupUI() method or similar
-    private void setupUI() {
-        setContentView(R.layout.activity_main);
-        
-        toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        
-        ViewPager2 viewPager = findViewById(R.id.viewPager);
-        TabLayout tabLayout = findViewById(R.id.tabLayout);
-        
-        // Set up ViewPager with fragments
-        ViewPagerAdapter viewPagerAdapter = new ViewPagerAdapter(this);
-        viewPagerAdapter.addFragment(new NotificationsFragment(), "Notifications");
-        viewPagerAdapter.addFragment(new ConversationsFragment(), "Conversations");
-        
-        viewPager.setAdapter(viewPagerAdapter);
-        
-        // Connect TabLayout with ViewPager2
-        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
-            tab.setText(viewPagerAdapter.getTitle(position));
-        }).attach();
-        
-        fab = findViewById(R.id.fab);
-        fab.setOnClickListener(v -> {
-            // Handle FAB click based on current tab
-            int currentItem = viewPager.getCurrentItem();
-            if (currentItem == 0) {
-                // Notifications tab
-                showFilterDialog();
-            } else {
-                // Conversations tab
-                showAddConversationDialog();
-            }
-        });
-        
-        // Optional: Change FAB icon based on current page
-        viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
-            @Override
-            public void onPageSelected(int position) {
-                if (position == 0) {
-                    fab.setImageResource(R.drawable.ic_filter);
-                } else {
-                    fab.setImageResource(R.drawable.ic_add);
-                }
-            }
-        });
     }
 }

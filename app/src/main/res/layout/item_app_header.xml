@@ -1,29 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="1dp"
-    app:strokeWidth="0dp"
-    app:cardBackgroundColor="@color/md_theme_surfaceVariant"
-    android:checkable="true"
+    android:background="@color/white"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp">
-
         <ImageView
             android:id="@+id/appIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:contentDescription="App Icon"
             android:src="@drawable/ic_app_placeholder"
             app:layout_constraintStart_toStartOf="parent"
@@ -32,14 +24,14 @@
 
         <TextView
             android:id="@+id/appName"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginEnd="12dp"
-            android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
-            android:textColor="@color/md_theme_onSurface"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/black"
             app:layout_constraintStart_toEndOf="@id/appIcon"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/notificationCount"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             tools:text="WhatsApp"/>
@@ -48,29 +40,24 @@
             android:id="@+id/notificationCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textColor="@color/md_theme_onSecondaryContainer"
-            android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
-            app:chipBackgroundColor="@color/md_theme_secondaryContainer"
-            app:chipMinHeight="20dp"
-            app:chipMinTouchTargetSize="20dp"
-            app:ensureMinTouchTargetSize="false"
-            app:layout_constraintStart_toEndOf="@id/appName"
+            android:layout_marginEnd="8dp"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+            app:layout_constraintEnd_toStartOf="@+id/expandIcon"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             tools:text="5"/>
 
         <ImageView
             android:id="@+id/expandIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/expand_collapse"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:padding="2dp"
             android:src="@drawable/ic_expand"
-            app:layout_constraintStart_toEndOf="@id/notificationCount"
+            android:tint="@color/md_theme_onSurfaceVariant"
+            android:contentDescription="Expand group"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-</com.google.android.material.card.MaterialCardView>

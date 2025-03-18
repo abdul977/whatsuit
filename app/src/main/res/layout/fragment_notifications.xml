@@ -1,30 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout 
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/appHeaderRecyclerView"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:clipToPadding="false"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/filterChips" />
-
-    <include
-        android:id="@+id/notificationFilters"
-        layout="@layout/layout_notification_filters"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:layout_constraintTop_toBottomOf="@id/appHeaderRecyclerView"/>
 
     <androidx.appcompat.widget.SearchView
         android:id="@+id/searchView"
@@ -36,92 +14,23 @@
         app:iconifiedByDefault="false"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/notificationFilters"/>
-
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/timeFilterChipGroup"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="16dp"
-        app:singleSelection="true"
-        app:layout_constraintEnd_toStartOf="@+id/sortOrderGroup"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/searchView">
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/todayChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_today"
-            android:minHeight="48dp"
-            style="@style/Widget.Material3.Chip.Filter" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/yesterdayChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_yesterday"
-            android:minHeight="48dp"
-            style="@style/Widget.Material3.Chip.Filter" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/allTimeChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_all_time"
-            android:minHeight="48dp"
-            style="@style/Widget.Material3.Chip.Filter" />
-    </com.google.android.material.chip.ChipGroup>
-
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/sortOrderGroup"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        app:singleSelection="true"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/timeFilterChipGroup">
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/sort_latest"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/sort_latest"
-            android:minHeight="48dp"
-            style="@style/Widget.Material3.Chip.Filter" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/sort_most_conversations"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/sort_most_active"
-            android:minHeight="48dp"
-            style="@style/Widget.Material3.Chip.Filter" />
-    </com.google.android.material.chip.ChipGroup>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/notificationsRecyclerView"
-        android:layout_width="0dp"
+        android:id="@+id/relatedNotificationsRecyclerView"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
         android:clipToPadding="false"
-        android:paddingBottom="16dp"
-        android:layoutAnimation="@anim/layout_animation_fall_down"
+        android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/timeFilterChipGroup" />
+        app:layout_constraintTop_toBottomOf="@id/searchView" />
 
     <TextView
         android:id="@+id/emptyView"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:gravity="center"
-        android:text="No notifications found"
-        android:textAppearance="@style/TextAppearance.WhatsUit.BodyMedium"
+        android:text="@string/no_notifications"
+        android:textAppearance="?attr/textAppearanceBody1"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

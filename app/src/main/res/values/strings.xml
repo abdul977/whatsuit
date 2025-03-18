@@ -14,14 +14,4 @@
     <string name="modified_tag">(edited)</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
-    <string name="expand_collapse">Expand or collapse</string>
-
-    <!-- Filter chips -->
-    <string name="filter_today">Today</string>
-    <string name="filter_yesterday">Yesterday</string>
-    <string name="filter_all_time">All Time</string>
-
-    <!-- Sort chips -->
-    <string name="sort_latest">Latest</string>
-    <string name="sort_most_active">Most Active</string>
 </resources>

@@ -119,23 +119,15 @@ public class AppHeaderAdapter extends RecyclerView.Adapter<AppHeaderAdapter.AppH
         void onAppHeaderClick(AppHeader header);
     }
 
-    public static class AppHeader {
-        public final String packageName;
-        public final String appName;
-        public int count;
+    static class AppHeader {
+        String packageName;
+        String appName;
+        int count;
 
-        public AppHeader(String packageName, String appName, int count) {
+        AppHeader(String packageName, String appName, int count) {
             this.packageName = packageName;
             this.appName = appName;
             this.count = count;
-        }
-
-        public AppHeader copy(String packageName, String appName, int count) {
-            return new AppHeader(
-                packageName != null ? packageName : this.packageName,
-                appName != null ? appName : this.appName,
-                count >= 0 ? count : this.count
-            );
         }
     }
 
