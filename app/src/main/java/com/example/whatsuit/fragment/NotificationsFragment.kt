@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.whatsuit.R
 import com.example.whatsuit.adapter.RelatedNotificationsAdapter
 import com.example.whatsuit.viewmodel.NotificationDetailViewModel
+import androidx.fragment.app.viewModels
 
 class NotificationsFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
