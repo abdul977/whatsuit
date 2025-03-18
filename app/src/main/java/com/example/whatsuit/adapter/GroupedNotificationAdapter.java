@@ -88,6 +88,17 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
 
         // Rotate expand icon based on expanded state
         holder.expandIcon.setRotation(isExpanded ? 180 : 0);
+
+        // Handle app name clicks
+        holder.itemView.setOnClickListener(v -> {
+            if (holder.getAdapterPosition() != RecyclerView.NO_POSITION) {
+                GroupHeader clickedHeader = (GroupHeader) items.get(holder.getAdapterPosition());
+                if (clickedHeader != null) {
+                    String packageName = clickedHeader.getPackageName();
+                    filterNotificationsByApp(packageName);
+                }
+            }
+        });
     }
 
     private void bindNotificationViewHolder(NotificationViewHolder holder, int position) {
@@ -471,5 +482,15 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
                        oldNotif.getContent().equals(newNotif.getContent());
             }
         }
+    }
+
+    private void filterNotificationsByApp(String packageName) {
+        List<NotificationEntity> filteredNotifications = new ArrayList<>();
+        for (NotificationEntity notification : getNotifications()) {
+            if (notification.getPackageName().equals(packageName)) {
+                filteredNotifications.add(notification);
+            }
+        }
+        updateNotifications(filteredNotifications);
     }
 }
