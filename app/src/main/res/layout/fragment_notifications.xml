@@ -25,4 +25,23 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/appHeaderChipGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/relatedNotificationsRecyclerView">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipAllApps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="All Apps"
+            app:chipBackgroundColor="@color/md_theme_onPrimary"
+            android:checkable="true"
+            android:checked="true" />
+    </com.google.android.material.chip.ChipGroup>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
