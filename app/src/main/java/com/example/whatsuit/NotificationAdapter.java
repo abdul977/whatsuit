@@ -1,14 +1,19 @@
 package com.example.whatsuit;
 
 import android.content.Intent;
+import android.view.MenuItem;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.format.DateUtils;
 import android.view.LayoutInflater;
+import android.view.MenuInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AnimationUtils;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -19,6 +24,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import com.google.android.material.chip.Chip;
 
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.util.AutoReplyManager;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,8 +34,12 @@ import java.util.Map;
 public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder> {
     private List<NotificationEntity> notifications = new ArrayList<>();
     private List<NotificationEntity> allNotifications = new ArrayList<>();
+    private AutoReplyManager autoReplyManager;
+    private PopupMenu activePopupMenu;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    public NotificationAdapter() {
+    public NotificationAdapter(AutoReplyManager autoReplyManager) {
+        this.autoReplyManager = autoReplyManager;
         setHasStableIds(true);
     }
 
@@ -67,6 +77,12 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             // Start activity with shared element transition
             v.getContext().startActivity(intent);
         });
+
+        // Show popup menu when menu button is clicked
+        holder.menuButton.setOnClickListener(menuView -> showPopupMenu(menuView, notification));
+
+        // Update auto-reply status
+        updateAutoReplyStatusAsync(holder, notification);
     }
 
     @Override
@@ -128,16 +144,147 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         }).dispatchUpdatesTo(this);
     }
 
+    private void showPopupMenu(View view, NotificationEntity notification) {
+        if (activePopupMenu != null) {
+            activePopupMenu.dismiss();
+        }
+        
+        PopupMenu popup = new PopupMenu(view.getContext(), view);
+        activePopupMenu = popup;
+        
+        MenuInflater inflater = popup.getMenuInflater();
+        inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
+        
+        MenuItem autoReplyItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
+        autoReplyItem.setEnabled(false);
+        
+        popup.setOnDismissListener(menu -> activePopupMenu = null);
+        
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(
+            notification.getPackageName(),
+            info.phoneNumber,
+            info.titlePrefix,
+            isDisabled -> mainHandler.post(() -> {
+                autoReplyItem.setTitle(isDisabled ? "Enable Auto-Reply" : "Disable Auto-Reply");
+                autoReplyItem.setEnabled(true);
+            })
+        );
+
+        popup.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_toggle_auto_reply) {
+                toggleAutoReply(notification);
+                return true;
+            } else if (item.getItemId() == R.id.action_view_details) {
+                Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
+                intent.putExtra("notification_id", notification.getId());
+                intent.putExtra("show_conversations_tab", true);
+                view.getContext().startActivity(intent);
+                return true;
+            } else if (item.getItemId() == R.id.action_view_history) {
+                if (view.getContext() instanceof MainActivity) {
+                    ((MainActivity) view.getContext()).showConversationHistory(notification);
+                }
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
+    }
+
+    private void toggleAutoReply(NotificationEntity notification) {
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        autoReplyManager.toggleAutoReply(
+            notification.getPackageName(),
+            info.phoneNumber,
+            info.titlePrefix,
+            isDisabled -> mainHandler.post(this::notifyDataSetChanged)
+        );
+    }
+
+    private void updateAutoReplyStatusAsync(NotificationViewHolder holder, NotificationEntity notification) {
+        holder.autoReplyStatusChip.setEnabled(false);
+        holder.autoReplyStatusChip.setText("Loading...");
+        holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
+
+        ExtractedInfo info = extractIdentifierInfo(notification);
+        
+        autoReplyManager.isAutoReplyDisabled(
+            notification.getPackageName(),
+            info.phoneNumber,
+            info.titlePrefix,
+            isDisabled -> mainHandler.post(() -> {
+                holder.autoReplyStatusChip.setText(isDisabled ? "Auto-reply disabled" : "Auto-reply enabled");
+                holder.autoReplyStatusChip.setEnabled(true);
+                holder.autoReplyStatusChip.setChipBackgroundColorResource(
+                    isDisabled ? R.color.md_theme_errorContainer : R.color.md_theme_primaryContainer
+                );
+                holder.autoReplyStatusChip.setTextColor(
+                    holder.autoReplyStatusChip.getContext().getColor(
+                        isDisabled ? R.color.md_theme_onErrorContainer : R.color.md_theme_onPrimaryContainer
+                    )
+                );
+            })
+        );
+    }
+
+    private ExtractedInfo extractIdentifierInfo(NotificationEntity notification) {
+        String phoneNumber = "";
+        String titlePrefix = "";
+        
+        if (notification.getPackageName().contains("whatsapp") && 
+            notification.getTitle() != null && 
+            notification.getTitle().matches(".*[0-9+].*")) {
+            try {
+                String content = notification.getTitle();
+                String extracted = content.replaceAll("[^0-9+\\-]", "");
+                String fullNumber = extracted.replaceAll("[^0-9]", "");
+                phoneNumber = fullNumber.length() >= 11 ? fullNumber.substring(0, 11) : fullNumber;
+            } catch (Exception e) {
+                titlePrefix = notification.getTitle() != null && notification.getTitle().length() >= 5 ?
+                    notification.getTitle().substring(0, 5) : notification.getTitle();
+            }
+        } else {
+            titlePrefix = notification.getTitle() != null && notification.getTitle().length() >= 5 ?
+                notification.getTitle().substring(0, 5) : notification.getTitle();
+        }
+        
+        return new ExtractedInfo(phoneNumber, titlePrefix);
+    }
+
+    private static class ExtractedInfo {
+        final String phoneNumber;
+        final String titlePrefix;
+
+        ExtractedInfo(String phoneNumber, String titlePrefix) {
+            this.phoneNumber = phoneNumber;
+            this.titlePrefix = titlePrefix;
+        }
+    }
+
     static class NotificationViewHolder extends RecyclerView.ViewHolder {
         TextView timestamp;
         TextView notificationTitle;
         TextView notificationContent;
+        ImageButton menuButton;
+        Chip autoReplyStatusChip;
 
         NotificationViewHolder(View itemView) {
             super(itemView);
             timestamp = itemView.findViewById(R.id.timestamp);
             notificationTitle = itemView.findViewById(R.id.notificationTitle);
             notificationContent = itemView.findViewById(R.id.notificationContent);
+            menuButton = itemView.findViewById(R.id.menuButton);
+            autoReplyStatusChip = itemView.findViewById(R.id.autoReplyStatusChip);
+        }
+    }
+
+    public void cleanup() {
+        if (activePopupMenu != null) {
+            activePopupMenu.dismiss();
+            activePopupMenu = null;
         }
     }
 }

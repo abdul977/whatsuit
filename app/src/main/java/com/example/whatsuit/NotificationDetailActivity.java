@@ -147,7 +147,7 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     }
 
     private void setupHelpers() {
-        timeFilterHelper = new TimeFilterHelper(this, (startTime, endTime) -> 
+        timeFilterHelper = new TimeFilterHelper(this, (startTime, endTime, displayText) -> 
             viewModel.filterNotificationsByTimeRange(startTime, endTime));
 
         autoReplyManager = new AutoReplyManager(this);

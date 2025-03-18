@@ -10,7 +10,12 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.whatsuit.NotificationAdapter
+import android.view.MenuItem
+import android.widget.PopupMenu
+import com.example.whatsuit.adapter.HybridNotificationAdapter
+import com.example.whatsuit.util.AutoReplyManager
+import com.example.whatsuit.MainActivity
+import com.example.whatsuit.NotificationDetailActivity
 import com.example.whatsuit.R
 import com.example.whatsuit.viewmodel.NotificationsViewModel
 import com.google.android.material.chip.Chip
@@ -20,7 +25,7 @@ class NotificationsFragment : Fragment() {
     private val viewModel: NotificationsViewModel by viewModels()
     private lateinit var notificationsRecyclerView: RecyclerView
     private lateinit var chipGroup: ChipGroup
-    private lateinit var notificationAdapter: NotificationAdapter
+    private lateinit var notificationAdapter: HybridNotificationAdapter
     private lateinit var emptyView: View
 
     override fun onCreateView(
@@ -35,9 +40,12 @@ class NotificationsFragment : Fragment() {
         chipGroup = view.findViewById(R.id.appHeaderChipGroup)
         emptyView = view.findViewById(R.id.emptyView)
         
-        // Set up RecyclerView
+        // Set up RecyclerView with HybridNotificationAdapter
         notificationsRecyclerView.layoutManager = LinearLayoutManager(requireContext())
-        notificationAdapter = NotificationAdapter()
+        notificationAdapter = HybridNotificationAdapter(
+            requireContext().packageManager,
+            AutoReplyManager.getInstance(requireContext())
+        )
         notificationsRecyclerView.adapter = notificationAdapter
 
         // Set up All Apps chip
@@ -58,9 +66,9 @@ class NotificationsFragment : Fragment() {
         // Initialize AllApps as selected
         chipAllApps.isChecked = true
 
-        // Observe filtered notifications for RecyclerView updates
-        viewModel.filteredNotifications.observe(viewLifecycleOwner) { notifications ->
-            notificationAdapter.setNotifications(notifications)
+        // Observe categorized notifications for RecyclerView updates
+        viewModel.categorizedNotifications.observe(viewLifecycleOwner) { notifications ->
+            notificationAdapter.updateNotifications(notifications)
             val isEmpty = notifications.isEmpty()
             notificationsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
             emptyView.visibility = if (isEmpty) View.VISIBLE else View.GONE
@@ -122,5 +130,10 @@ class NotificationsFragment : Fragment() {
         }
 
         return view
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        notificationAdapter.cleanup()
     }
 }

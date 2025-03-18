@@ -9,10 +9,22 @@ import java.util.concurrent.Executors;
 import java.lang.ref.WeakReference;
 
 public class AutoReplyManager {
+    private static volatile AutoReplyManager instance;
     private WeakReference<Context> contextRef;
     private volatile ExecutorService executor;
     private volatile NotificationEntity currentNotification;
     private volatile MenuItem autoReplyMenuItem;
+
+    public static AutoReplyManager getInstance(Context context) {
+        if (instance == null) {
+            synchronized (AutoReplyManager.class) {
+                if (instance == null) {
+                    instance = new AutoReplyManager(context);
+                }
+            }
+        }
+        return instance;
+    }
 
     public interface AutoReplyCallback {
         void onStatusChanged(boolean isDisabled);
