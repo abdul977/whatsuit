@@ -1,9 +1,11 @@
 package com.example.whatsuit.fragment
 
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +21,7 @@ class NotificationsFragment : Fragment() {
     private lateinit var notificationsRecyclerView: RecyclerView
     private lateinit var chipGroup: ChipGroup
     private lateinit var notificationAdapter: NotificationAdapter
+    private lateinit var emptyView: View
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -30,6 +33,7 @@ class NotificationsFragment : Fragment() {
         // Initialize views
         notificationsRecyclerView = view.findViewById(R.id.relatedNotificationsRecyclerView)
         chipGroup = view.findViewById(R.id.appHeaderChipGroup)
+        emptyView = view.findViewById(R.id.emptyView)
         
         // Set up RecyclerView
         notificationsRecyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -38,12 +42,28 @@ class NotificationsFragment : Fragment() {
 
         // Set up All Apps chip
         val chipAllApps = view.findViewById<Chip>(R.id.chipAllApps)
-        chipAllApps.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                viewModel.filteredNotifications.observe(viewLifecycleOwner) { notifications ->
-                    notificationAdapter.setNotifications(notifications)
-                }
-            }
+        var lastSelectedChip: Chip = chipAllApps
+        
+        viewModel.totalNotificationCount.observe(viewLifecycleOwner) { count ->
+            chipAllApps.text = getString(R.string.all_apps_count, count)
+        }
+        
+        chipAllApps.setOnClickListener {
+            lastSelectedChip.isChecked = false
+            chipAllApps.isChecked = true
+            lastSelectedChip = chipAllApps
+            viewModel.setSelectedApp(null)
+        }
+
+        // Initialize AllApps as selected
+        chipAllApps.isChecked = true
+
+        // Observe filtered notifications for RecyclerView updates
+        viewModel.filteredNotifications.observe(viewLifecycleOwner) { notifications ->
+            notificationAdapter.setNotifications(notifications)
+            val isEmpty = notifications.isEmpty()
+            notificationsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
+            emptyView.visibility = if (isEmpty) View.VISIBLE else View.GONE
         }
 
         // Observe categorized notifications and create app filter chips
@@ -56,16 +76,44 @@ class NotificationsFragment : Fragment() {
             // Add chip for each app
             categorizedNotifications.forEach { (appName, notifications) ->
                 val chip = Chip(requireContext()).apply {
-                    text = appName
+                    text = getString(R.string.app_with_count, appName, notifications.size)
                     isCheckable = true
                     chipBackgroundColor = chipAllApps.chipBackgroundColor
                     chipStrokeWidth = chipAllApps.chipStrokeWidth
                     chipStrokeColor = chipAllApps.chipStrokeColor
                     isCheckedIconVisible = true
-                    setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Chip)
-                    setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) {
-                            notificationAdapter.setNotifications(notifications)
+                    chipStartPadding = resources.getDimension(R.dimen.material_chip_spacing)
+                    chipEndPadding = resources.getDimension(R.dimen.material_chip_spacing)
+                    chipMinHeight = resources.getDimension(R.dimen.chip_min_height)
+                    chipCornerRadius = resources.getDimension(R.dimen.chip_corner_radius)
+                    
+                    // Get app icon from notifications
+                    val notification = notifications.firstOrNull()
+                    if (notification != null && notification.packageName != null) {
+                        try {
+                            val packageManager = requireContext().packageManager
+                            val icon = packageManager.getApplicationIcon(notification.packageName)
+                            chipIcon = icon
+                            isChipIconVisible = true
+                        } catch (e: PackageManager.NameNotFoundException) {
+                            chipIcon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_app_placeholder)
+                            isChipIconVisible = true
+                        }
+                    } else {
+                        chipIcon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_app_placeholder)
+                        isChipIconVisible = true
+                    }
+                    
+                    setOnClickListener {
+                        lastSelectedChip.isChecked = false
+                        isChecked = true
+                        lastSelectedChip = this
+                        // Get package name from the first notification in this group
+                        val notification = notifications.firstOrNull()
+                        if (notification != null && notification.packageName != null) {
+                            viewModel.setSelectedApp(notification.packageName)
+                            // Scroll to show the selected chip
+                            post { parent.requestChildFocus(this, this) }
                         }
                     }
                 }

@@ -234,16 +234,12 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         setContentView(R.layout.activity_main);
         
         // Initialize views from regular layout
-        recyclerView = findViewById(R.id.notificationsRecyclerView);
-        emptyView = findViewById(R.id.emptyView);
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
         toolbar = findViewById(R.id.toolbar);
         
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
-        recyclerView.setAlpha(0f);
-        recyclerView.setTranslationY(100f);
         if (fab != null) {
             fab.setScaleX(0f);
             fab.setScaleY(0f);
@@ -287,13 +283,6 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             .setDuration(300)
             .start();
         
-        // Animate recyclerView with delay
-        recyclerView.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(500)
-            .setStartDelay(150)
-            .start();
         
         // Animate FAB with additional delay and overshoot
         if (fab != null) {
@@ -320,37 +309,18 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
 
         // Initialize ViewModel
         notificationsViewModel = new ViewModelProvider(this).get(NotificationsViewModel.class);
-        
-        // Set up RecyclerView
-        recyclerView = findViewById(R.id.notificationsRecyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
-        recyclerView.setAdapter(notificationAdapter);
-
-        // Set up empty view
-        emptyView = findViewById(R.id.emptyView);
 
         // Set up FAB
         fab = findViewById(R.id.fab);
         fab.setOnClickListener(v -> showNewMessageDialog());
 
+        // Set up empty view
+        emptyView = findViewById(R.id.emptyView);
+
         // Check for notification access permission
         if (!isNotificationServiceEnabled()) {
             showNotificationAccessDialog();
         }
-
-        // Observe notifications
-        notificationsViewModel.getFilteredNotifications().observe(this, notifications -> {
-            if (notifications != null && !notifications.isEmpty()) {
-                notificationAdapter.updateNotifications(notifications);
-                emptyView.setVisibility(View.GONE);
-                recyclerView.setVisibility(View.VISIBLE);
-            } else {
-                notificationAdapter.updateNotifications(new ArrayList<>());
-                emptyView.setVisibility(View.VISIBLE);
-                recyclerView.setVisibility(View.GONE);
-            }
-        });
     }
 
     public void showConversationHistory(NotificationEntity notification) {

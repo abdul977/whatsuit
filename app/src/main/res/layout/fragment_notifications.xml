@@ -4,36 +4,42 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.appcompat.widget.SearchView
-        android:id="@+id/searchView"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        android:background="@drawable/search_filter_background"
-        android:queryHint="@string/search_notifications_hint"
-        app:iconifiedByDefault="false"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
 
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/appHeaderChipGroup"
-        android:layout_width="0dp"
+    <HorizontalScrollView
+        android:id="@+id/chipScrollView"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="8dp"
         android:layout_marginTop="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/searchView">
+        android:scrollbars="none"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipAllApps"
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/appHeaderChipGroup"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="All Apps"
-            style="@style/Widget.MaterialComponents.Chip.Choice" />
+            android:paddingHorizontal="8dp"
+            app:singleSelection="true"
+            app:selectionRequired="true">
 
-    </com.google.android.material.chip.ChipGroup>
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipAllApps"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="All Apps"
+                android:checkable="true"
+                android:checked="true"
+                style="@style/Widget.MaterialComponents.Chip.Filter"
+                app:chipIcon="@drawable/ic_app_placeholder"
+                app:chipIconEnabled="true"
+                app:chipIconVisible="true"
+                app:chipStartPadding="12dp"
+                app:chipEndPadding="12dp"
+                app:chipMinHeight="48dp"
+                app:chipCornerRadius="24dp"/>
+
+        </com.google.android.material.chip.ChipGroup>
+
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/relatedNotificationsRecyclerView"
@@ -42,7 +48,7 @@
         android:clipToPadding="false"
         android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appHeaderChipGroup" />
+        app:layout_constraintTop_toBottomOf="@id/chipScrollView" />
 
     <TextView
         android:id="@+id/emptyView"

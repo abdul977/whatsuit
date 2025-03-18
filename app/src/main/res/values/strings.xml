@@ -14,4 +14,6 @@
     <string name="modified_tag">(edited)</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="all_apps_count">All Apps (%1$d)</string>
+    <string name="app_with_count">%1$s (%2$d)</string>
 </resources>
