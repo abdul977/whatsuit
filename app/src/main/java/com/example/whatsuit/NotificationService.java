@@ -24,6 +24,7 @@ import java.util.Set;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppSettingDao;
 import com.example.whatsuit.data.AppSettingEntity;
+import com.example.whatsuit.data.AutoReplyRule;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.service.GeminiService;
 import com.example.whatsuit.util.SentMessageTracker;
@@ -117,7 +118,7 @@ public class NotificationService extends NotificationListenerService {
                     entity.setId(notificationId);
                     
                     // Check if auto-reply is enabled
-                    if (shouldAutoReply(packageName)) {
+                    if (shouldAutoReply(entity)) {
                         handleAutoReply(sbn, entity, notification);
                     }
                     
@@ -181,7 +182,9 @@ public class NotificationService extends NotificationListenerService {
         return entity.getPackageName() + "_" + entity.getTitle().trim().toLowerCase().replaceAll("\\s+", "_");
     }
 
-    private boolean shouldAutoReply(String packageName) {
+    private boolean shouldAutoReply(NotificationEntity notification) {
+        String packageName = notification.getPackageName();
+
         // Check global auto-reply setting
         if (!prefs.getBoolean("auto_reply_enabled", true)) {
             return false;
@@ -190,7 +193,33 @@ public class NotificationService extends NotificationListenerService {
         try {
             // Check app-specific settings
             AppSettingEntity appSetting = database.appSettingDao().getAppSetting(packageName);
-            return appSetting != null && appSetting.isAutoReplyEnabled();
+            if (appSetting == null || !appSetting.isAutoReplyEnabled()) {
+                return false;
+            }
+
+            // Generate identifier info
+            String identifier;
+            String identifierType;
+            if (packageName.contains("whatsapp") && 
+                notification.getTitle() != null && 
+                notification.getTitle().matches(".*[0-9+].*")) {
+                // For WhatsApp, use phone number
+                String title = notification.getTitle();
+                String extracted = title.replaceAll("[^0-9+\\-]", "");
+                identifier = extracted.replaceAll("[^0-9]", "");
+                identifierType = AutoReplyRule.TYPE_PHONE_NUMBER;
+            } else {
+                // For other apps, use title
+                identifier = notification.getTitle();
+                identifierType = AutoReplyRule.TYPE_TITLE;
+            }
+
+            // Check if there's a rule disabling auto-reply for this conversation
+            boolean isDisabled = database.autoReplyRuleDao()
+                .isAutoReplyDisabled(packageName, identifier, identifierType);
+
+            return !isDisabled; // Return true only if no disabling rule exists
+
         } catch (Exception e) {
             Log.e(TAG, "Error checking auto-reply settings", e);
             return false;
@@ -202,6 +231,12 @@ public class NotificationService extends NotificationListenerService {
             // Check if we've already replied to this notification
             if (entity.isAutoReplied()) {
                 Log.d(TAG, "Notification already auto-replied, skipping duplicate reply");
+                return;
+            }
+
+            // Check if auto-reply is allowed for this notification
+            if (!shouldAutoReply(entity)) {
+                Log.d(TAG, "Auto-reply is disabled for this conversation");
                 return;
             }
             

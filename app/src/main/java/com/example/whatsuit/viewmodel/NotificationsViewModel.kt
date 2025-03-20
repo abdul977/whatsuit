@@ -8,6 +8,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.switchMap
 import com.example.whatsuit.data.AppDatabase
 import com.example.whatsuit.data.NotificationEntity
+import android.util.Log
 
 class NotificationsViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application.applicationContext)
@@ -33,22 +34,18 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
                         notificationDao.getNotificationsForApp(packageName)
                     
                     // Only search filter
-                    packageName == null ->
-                        notificationDao.getSmartGroupedNotifications().map { notifications ->
-                            notifications.filter {
-                                it.title.contains(query, ignoreCase = true) ||
-                                it.content.contains(query, ignoreCase = true)
-                            }
-                        }
+                    packageName == null -> {
+                        val searchTerm = if (!query.startsWith("%")) "%$query%" else query
+                        notificationDao.searchNotifications(searchTerm)
+                    }
                     
                     // Both filters
-                    else ->
-                        notificationDao.getNotificationsForApp(packageName).map { notifications ->
-                            notifications.filter {
-                                it.title.contains(query, ignoreCase = true) ||
-                                it.content.contains(query, ignoreCase = true)
-                            }
+                    else -> {
+                        val searchTerm = if (!query.startsWith("%")) "%$query%" else query
+                        notificationDao.searchNotifications(searchTerm).map { notifications ->
+                            notifications.filter { it.packageName == packageName }
                         }
+                    }
                 }
             }
         }
@@ -73,6 +70,16 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
     }
     
     fun setSearchQuery(query: String) {
-        searchQuery.value = query.trim()
+        val trimmedQuery = query.trim()
+        if (trimmedQuery != searchQuery.value?.trim('%')) {
+            searchQuery.value = trimmedQuery
+        }
+    }
+
+    // Add observer in init block
+    init {
+        filteredNotifications.observeForever { notifications ->
+            Log.d("NotificationsViewModel", "Filtered notifications count: ${notifications.size}")
+        }
     }
 }

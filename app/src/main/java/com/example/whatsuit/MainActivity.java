@@ -33,6 +33,7 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.view.inputmethod.InputMethodManager;
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -374,12 +375,21 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         }).start();
     }
 
+    private boolean isSearchExpanded = false;
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
         
         MenuItem searchItem = menu.findItem(R.id.action_search);
         searchView = (SearchView) searchItem.getActionView();
+        
+        // Restore search expanded state
+        if (isSearchExpanded) {
+            searchItem.expandActionView();
+        }
+        
+        // Configure SearchView
         searchView.setQueryHint(getString(R.string.search_notifications_hint));
         searchView.setMaxWidth(Integer.MAX_VALUE);
         searchView.setIconifiedByDefault(true);
@@ -387,37 +397,55 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         searchView.setBackground(getDrawable(R.drawable.search_filter_background));
         searchView.setContentDescription(getString(R.string.search_notifications));
         
-        // Style the search text
+        // Style the search text and icon colors
         int searchPlateId = searchView.getContext().getResources()
                 .getIdentifier("android:id/search_src_text", null, null);
         TextView searchPlateTextView = searchView.findViewById(searchPlateId);
         if (searchPlateTextView != null) {
             searchPlateTextView.setTextColor(getColor(R.color.md_theme_onSurface));
             searchPlateTextView.setHintTextColor(getColor(R.color.md_theme_onSurfaceVariant));
+            searchPlateTextView.setTextSize(16); // Increase text size
         }
 
-        // Remove the underline
+        // Style close button
+        ImageView closeButton = searchView.findViewById(androidx.appcompat.R.id.search_close_btn);
+        if (closeButton != null) {
+            closeButton.setImageDrawable(getDrawable(R.drawable.ic_close));
+            closeButton.setColorFilter(getColor(R.color.md_theme_onSurface));
+            // Clear search and collapse on close button click
+            closeButton.setOnClickListener(v -> {
+                searchView.setQuery("", false);
+                notificationsViewModel.setSearchQuery("");
+                searchView.clearFocus();
+                if (!searchView.isIconified()) {
+                    searchItem.collapseActionView();
+                }
+            });
+        }
+
+        // Remove the underline and add elevation
         View searchPlate = searchView.findViewById(androidx.appcompat.R.id.search_plate);
         if (searchPlate != null) {
             searchPlate.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            searchPlate.setElevation(4f);
         }
-
-        // Clear focus when iconified
-        searchView.setOnCloseListener(() -> {
-            searchView.clearFocus();
-            return false;
-        });
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
                 notificationsViewModel.setSearchQuery(query);
+                searchView.clearFocus(); // Hide keyboard on submit
                 return true;
             }
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                notificationsViewModel.setSearchQuery(newText);
+                // Don't search on empty string
+                if (newText == null || newText.trim().isEmpty()) {
+                    notificationsViewModel.setSearchQuery("");
+                } else {
+                    notificationsViewModel.setSearchQuery(newText.trim());
+                }
                 return true;
             }
         });
@@ -426,18 +454,36 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
             @Override
             public boolean onMenuItemActionExpand(MenuItem item) {
+                isSearchExpanded = true;
+                searchView.post(() -> {
+                    searchView.requestFocus();
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    imm.showSoftInput(searchView.findFocus(), 0);
+                });
                 return true;
             }
 
             @Override
             public boolean onMenuItemActionCollapse(MenuItem item) {
+                isSearchExpanded = false;
                 notificationsViewModel.setSearchQuery(""); // Clear search when collapsed
+                searchView.clearFocus();
                 return true;
             }
         });
 
         return true;
     }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean("isSearchExpanded", isSearchExpanded);
+        if (isSearchExpanded && searchView != null) {
+            outState.putString("searchQuery", searchView.getQuery().toString());
+        }
+    }
+
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {

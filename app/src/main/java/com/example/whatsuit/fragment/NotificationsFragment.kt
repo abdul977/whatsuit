@@ -66,23 +66,22 @@ class NotificationsFragment : Fragment() {
         // Initialize AllApps as selected
         chipAllApps.isChecked = true
 
-        // Observe categorized notifications for RecyclerView updates
-        viewModel.categorizedNotifications.observe(viewLifecycleOwner) { notifications ->
-            notificationAdapter.updateNotifications(notifications)
+        // Observe filtered notifications
+        viewModel.filteredNotifications.observe(viewLifecycleOwner) { notifications ->
+            val groupedNotifications = notifications.groupBy { it.appName ?: "Unknown" }.toSortedMap()
+            notificationAdapter.updateNotifications(groupedNotifications)
             val isEmpty = notifications.isEmpty()
             notificationsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
             emptyView.visibility = if (isEmpty) View.VISIBLE else View.GONE
-        }
-
-        // Observe categorized notifications and create app filter chips
-        viewModel.categorizedNotifications.observe(viewLifecycleOwner) { categorizedNotifications ->
+        
+            // Update app filter chips
             // Remove existing dynamic chips (keep "All Apps" chip)
             for (i in chipGroup.childCount - 1 downTo 1) {
                 chipGroup.removeViewAt(i)
             }
 
             // Add chip for each app
-            categorizedNotifications.forEach { (appName, notifications) ->
+            groupedNotifications.forEach { (appName, notifications) ->
                 val chip = Chip(requireContext()).apply {
                     text = getString(R.string.app_with_count, appName, notifications.size)
                     isCheckable = true

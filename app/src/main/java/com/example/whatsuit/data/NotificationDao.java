@@ -29,10 +29,8 @@ public interface NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
     LiveData<List<NotificationEntity>> getAllNotifications();
 
-    @Query("SELECT * FROM notifications WHERE " +
-           "LOWER(title) LIKE LOWER(:query) OR " +
-           "LOWER(content) LIKE LOWER(:query) OR " +
-           "LOWER(appName) LIKE LOWER(:query) " +
+    @Query("SELECT * FROM notifications " +
+           "WHERE (title LIKE :query OR content LIKE :query OR appName LIKE :query) " +
            "ORDER BY timestamp DESC")
     LiveData<List<NotificationEntity>> searchNotifications(String query);
 
