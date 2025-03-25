@@ -75,9 +75,7 @@ dependencies {
     // Room components
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
-    implementation("androidx.room:room-paging:$room_version")
     kapt("androidx.room:room-compiler:$room_version")
-    annotationProcessor("androidx.room:room-compiler:$room_version")
     
     // LiveData and ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")

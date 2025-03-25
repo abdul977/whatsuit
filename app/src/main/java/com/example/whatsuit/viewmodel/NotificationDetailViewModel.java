@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistory;
+import com.example.whatsuit.util.NotificationUtils;
 
 public class NotificationDetailViewModel extends AndroidViewModel {
     private final AppDatabase database;
@@ -92,23 +93,16 @@ public class NotificationDetailViewModel extends AndroidViewModel {
         NotificationEntity notification = currentNotification.getValue();
         if (notification == null) return;
 
-        String phoneNumber = "";
-        String titlePrefix = "";
-        
-        if (notification.getPackageName().contains("whatsapp") && 
-            notification.getContent().matches(".*\\d.*")) {
-            phoneNumber = notification.getContent().replaceAll("[^0-9]", "")
-                         .substring(0, Math.min(11, notification.getContent().length()));
-        } else {
-            titlePrefix = notification.getTitle()
-                         .substring(0, Math.min(5, notification.getTitle().length()));
-        }
+        String identifier = NotificationUtils.isWhatsAppPackage(notification.getPackageName()) &&
+                          NotificationUtils.hasPhoneNumber(notification.getTitle()) ?
+                          NotificationUtils.normalizePhoneNumber(notification.getTitle()) :
+                          NotificationUtils.getTitlePrefix(notification.getTitle());
 
         database.notificationDao()
                 .getRelatedNotificationsByTimeRange(
                         notification.getPackageName(),
-                        phoneNumber,
-                        titlePrefix,
+                        identifier,
+                        identifier,
                         startTime,
                         endTime)
                 .observeForever(notifications -> {

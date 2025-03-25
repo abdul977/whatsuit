@@ -24,10 +24,11 @@ import java.util.Set;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppSettingDao;
 import com.example.whatsuit.data.AppSettingEntity;
-import com.example.whatsuit.data.AutoReplyRule;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.service.GeminiService;
 import com.example.whatsuit.util.SentMessageTracker;
+import com.example.whatsuit.util.ConversationIdGenerator;
+import com.example.whatsuit.util.NotificationUtils;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,9 +42,8 @@ public class NotificationService extends NotificationListenerService {
     private final Set<String> recentlyProcessedConversations = Collections.synchronizedSet(new HashSet<>());
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    // Add this constant
     private static final String PREF_THROTTLE_DELAY = "auto_reply_throttle_delay_ms";
-    private static final int DEFAULT_THROTTLE_DELAY_MS = 500; // 0.5 seconds instead of default
+    private static final int DEFAULT_THROTTLE_DELAY_MS = 500;
 
     @Override
     public void onCreate() {
@@ -53,10 +53,9 @@ public class NotificationService extends NotificationListenerService {
         geminiService = new GeminiService(this);
         prefs = getSharedPreferences("whatsuit_settings", MODE_PRIVATE);
         
-        // Initialize Gemini service
         executorService.execute(() -> {
             try {
-                geminiService.initializeFromJava();  // Use the non-suspend version
+                geminiService.initializeFromJava();
                 Log.d(TAG, "GeminiService initialization triggered");
             } catch (Exception e) {
                 Log.e(TAG, "Error initializing GeminiService", e);
@@ -75,7 +74,6 @@ public class NotificationService extends NotificationListenerService {
             String title = extras.getString(Notification.EXTRA_TITLE, "");
             String text = extras.getString(Notification.EXTRA_TEXT, "");
             
-            // Skip if this is our own sent message
             if (SentMessageTracker.getInstance().isLikelyOwnMessage(text)) {
                 Log.d(TAG, "Skipping processing of our own message: " + text);
                 return;
@@ -83,12 +81,10 @@ public class NotificationService extends NotificationListenerService {
             
             String packageName = sbn.getPackageName();
             
-            // Get app name from package name
             PackageManager packageManager = getPackageManager();
             ApplicationInfo applicationInfo = packageManager.getApplicationInfo(packageName, 0);
             String appName = packageManager.getApplicationLabel(applicationInfo).toString();
             
-            // Create notification entity
             NotificationEntity entity = new NotificationEntity();
             entity.setTitle(title);
             entity.setContent(text);
@@ -96,11 +92,9 @@ public class NotificationService extends NotificationListenerService {
             entity.setAppName(appName);
             entity.setTimestamp(sbn.getPostTime());
             
-            // Generate conversation ID
-            String conversationId = generateConversationId(entity);
+            String conversationId = ConversationIdGenerator.generate(entity);
             entity.setConversationId(conversationId);
 
-            // Log notification details
             Log.i(TAG, "\n====== NEW NOTIFICATION RECEIVED ======" +
                 "\nApp: " + appName +
                 "\nPackage: " + packageName +
@@ -110,15 +104,12 @@ public class NotificationService extends NotificationListenerService {
                 "\nTimestamp: " + new java.util.Date(sbn.getPostTime()) +
                 "\n===================================");
 
-            // Insert or update notification in database using background thread
             executorService.execute(() -> {
                 try {
-                    // Use upsertNotification instead of insert to handle duplicates
                     long notificationId = database.notificationDao().upsertNotification(entity);
                     entity.setId(notificationId);
                     
-                    // Check if auto-reply is enabled
-                    if (shouldAutoReply(entity)) {
+                    if (shouldAutoReply(packageName)) {
                         handleAutoReply(sbn, entity, notification);
                     }
                     
@@ -132,10 +123,139 @@ public class NotificationService extends NotificationListenerService {
         }
     }
 
-    @Override
-    public void onNotificationRemoved(StatusBarNotification sbn) {
-        // Handle notification removal if needed
+    private boolean shouldAutoReply(String packageName) {
+        if (!prefs.getBoolean("auto_reply_enabled", true)) {
+            return false;
+        }
+
+        try {
+            AppSettingEntity appSetting = database.appSettingDao().getAppSetting(packageName);
+            return appSetting != null && appSetting.isAutoReplyEnabled();
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking auto-reply settings", e);
+            return false;
+        }
     }
+
+    private void handleAutoReply(StatusBarNotification sbn, NotificationEntity entity, Notification notification) {
+        try {
+            if (entity.isAutoReplied()) {
+                Log.d(TAG, "Notification already auto-replied, skipping duplicate reply");
+                return;
+            }
+
+            String phoneNumber = "";
+            String titlePrefix = "";
+            
+            if (NotificationUtils.isWhatsAppPackage(entity.getPackageName()) && 
+                NotificationUtils.hasPhoneNumber(entity.getTitle())) {
+                phoneNumber = NotificationUtils.normalizePhoneNumber(entity.getTitle());
+            } else {
+                titlePrefix = NotificationUtils.getTitlePrefix(entity.getTitle());
+            }
+            
+            if (database.notificationDao().isAutoReplyDisabled(entity.getPackageName(), phoneNumber, titlePrefix)) {
+                Log.d(TAG, "Auto-reply is disabled for this conversation, skipping reply");
+                return;
+            }
+            
+            String conversationId = entity.getConversationId();
+            
+            if (recentlyProcessedConversations.contains(conversationId)) {
+                Log.d(TAG, "Conversation ID " + conversationId + " was just processed, skipping to prevent duplicate replies");
+                return;
+            }
+            
+            recentlyProcessedConversations.add(conversationId);
+
+            int throttleDelay = prefs.getInt(PREF_THROTTLE_DELAY, DEFAULT_THROTTLE_DELAY_MS);
+            handler.postDelayed(() -> recentlyProcessedConversations.remove(conversationId), throttleDelay);
+
+            Action[] actions = notification.actions;
+            if (actions == null) {
+                Log.d(TAG, "No actions found for auto-reply");
+                return;
+            }
+
+            Action replyAction = null;
+            RemoteInput remoteInput = null;
+
+            for (Action action : actions) {
+                RemoteInput[] remoteInputs = action.getRemoteInputs();
+                if (remoteInputs != null && remoteInputs.length > 0) {
+                    replyAction = action;
+                    remoteInput = remoteInputs[0];
+                    break;
+                }
+            }
+
+            if (replyAction == null || remoteInput == null) {
+                Log.d(TAG, "No reply action or remote input found");
+                return;
+            }
+
+            final Action finalReplyAction = replyAction;
+            final RemoteInput finalRemoteInput = remoteInput;
+
+            geminiService.generateReply(entity.getId(), entity.getContent(), new GeminiService.ResponseCallback() {
+                @Override
+                public void onPartialResponse(String text) {}
+
+                @Override
+                public void onComplete(String response) {
+                    try {
+                        Bundle resultsBundle = new Bundle();
+                        resultsBundle.putString(finalRemoteInput.getResultKey(), response);
+
+                        Intent intent = new Intent();
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            RemoteInput.addResultsToIntent(new RemoteInput[]{finalRemoteInput}, intent, resultsBundle);
+                        } else {
+                            Bundle wrapper = new Bundle();
+                            wrapper.putBundle(RemoteInput.RESULTS_CLIP_LABEL, resultsBundle);
+                            intent.putExtra(RemoteInput.EXTRA_RESULTS_DATA, wrapper);
+                        }
+                        
+                        finalReplyAction.actionIntent.send(NotificationService.this, 0, intent);
+                        SentMessageTracker.getInstance().recordSentMessage(response);
+
+                        executorService.execute(() -> {
+                            try {
+                                entity.setAutoReplied(true);
+                                entity.setAutoReplyContent(response);
+                                database.notificationDao().upsertNotification(entity);
+                                Log.i(TAG, "\n====== AUTO-REPLY SENT ======" +
+                                    "\nNotification ID: " + entity.getId() +
+                                    "\nConversation ID: " + entity.getConversationId() +
+                                    "\nOriginal Message: " + entity.getContent() +
+                                    "\nAuto-Reply: " + response +
+                                    "\nTimestamp: " + new java.util.Date() +
+                                    "\n===========================");
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error updating notification after auto-reply", e);
+                            }
+                        });
+
+                    } catch (PendingIntent.CanceledException e) {
+                        Log.e(TAG, "Error sending auto-reply", e);
+                    }
+                }
+
+                @Override
+                public void onError(Throwable error) {
+                    Log.e(TAG, "Error generating auto-reply", error);
+                }
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling auto-reply", e);
+        }
+    }
+
+    @Override
+    public void onNotificationRemoved(StatusBarNotification sbn) {}
 
     @Override
     public void onListenerConnected() {
@@ -157,198 +277,6 @@ public class NotificationService extends NotificationListenerService {
         }
         if (geminiService != null) {
             geminiService.shutdown();
-        }
-    }
-
-    private String generateConversationId(NotificationEntity entity) {
-        if (entity.getPackageName().contains("whatsapp")) {
-            String title = entity.getTitle();
-            if (title.matches(".*[0-9+].*")) {
-                // For phone number based titles, normalize the number
-                String normalizedNumber = title.replaceAll("[^0-9+]", "");
-                // Keep only last 11 digits if longer
-                if (normalizedNumber.length() > 11) {
-                    normalizedNumber = normalizedNumber.substring(normalizedNumber.length() - 11);
-                }
-                return "whatsapp_" + normalizedNumber;
-            } else {
-                // For name-based titles (e.g., "John Emialin"), use normalized name
-                String normalizedName = title.trim().toLowerCase().replaceAll("\\s+", "_");
-                return "whatsapp_contact_" + normalizedName;
-            }
-        }
-        
-        // For other apps, use package and normalized title
-        return entity.getPackageName() + "_" + entity.getTitle().trim().toLowerCase().replaceAll("\\s+", "_");
-    }
-
-    private boolean shouldAutoReply(NotificationEntity notification) {
-        String packageName = notification.getPackageName();
-
-        // Check global auto-reply setting
-        if (!prefs.getBoolean("auto_reply_enabled", true)) {
-            return false;
-        }
-
-        try {
-            // Check app-specific settings
-            AppSettingEntity appSetting = database.appSettingDao().getAppSetting(packageName);
-            if (appSetting == null || !appSetting.isAutoReplyEnabled()) {
-                return false;
-            }
-
-            // Generate identifier info
-            String identifier;
-            String identifierType;
-            if (packageName.contains("whatsapp") && 
-                notification.getTitle() != null && 
-                notification.getTitle().matches(".*[0-9+].*")) {
-                // For WhatsApp, use phone number
-                String title = notification.getTitle();
-                String extracted = title.replaceAll("[^0-9+\\-]", "");
-                identifier = extracted.replaceAll("[^0-9]", "");
-                identifierType = AutoReplyRule.TYPE_PHONE_NUMBER;
-            } else {
-                // For other apps, use title
-                identifier = notification.getTitle();
-                identifierType = AutoReplyRule.TYPE_TITLE;
-            }
-
-            // Check if there's a rule disabling auto-reply for this conversation
-            boolean isDisabled = database.autoReplyRuleDao()
-                .isAutoReplyDisabled(packageName, identifier, identifierType);
-
-            return !isDisabled; // Return true only if no disabling rule exists
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error checking auto-reply settings", e);
-            return false;
-        }
-    }
-
-    private void handleAutoReply(StatusBarNotification sbn, NotificationEntity entity, Notification notification) {
-        try {
-            // Check if we've already replied to this notification
-            if (entity.isAutoReplied()) {
-                Log.d(TAG, "Notification already auto-replied, skipping duplicate reply");
-                return;
-            }
-
-            // Check if auto-reply is allowed for this notification
-            if (!shouldAutoReply(entity)) {
-                Log.d(TAG, "Auto-reply is disabled for this conversation");
-                return;
-            }
-            
-            // Get conversation ID for better tracking
-            String conversationId = entity.getConversationId();
-            
-            // Add additional check for recently processed conversations
-            if (recentlyProcessedConversations.contains(conversationId)) {
-                Log.d(TAG, "Conversation ID " + conversationId + " was just processed, skipping to prevent duplicate replies");
-                return;
-            }
-            
-            // Add this conversation to the recently processed list
-            recentlyProcessedConversations.add(conversationId);
-
-            // Get throttle delay from preferences with default value
-            int throttleDelay = prefs.getInt(PREF_THROTTLE_DELAY, DEFAULT_THROTTLE_DELAY_MS);
-
-            // Schedule removal after the configurable delay
-            handler.postDelayed(() -> recentlyProcessedConversations.remove(conversationId), throttleDelay);
-
-            // Find actions that can be used to reply
-            Action[] actions = notification.actions;
-            if (actions == null) {
-                Log.d(TAG, "No actions found for auto-reply");
-                return;
-            }
-
-            Action replyAction = null;
-            RemoteInput remoteInput = null;
-
-            // Find action with remote input
-            for (Action action : actions) {
-                RemoteInput[] remoteInputs = action.getRemoteInputs();
-                if (remoteInputs != null && remoteInputs.length > 0) {
-                    replyAction = action;
-                    remoteInput = remoteInputs[0];
-                    break;
-                }
-            }
-
-            if (replyAction == null || remoteInput == null) {
-                Log.d(TAG, "No reply action or remote input found");
-                return;
-            }
-
-            final Action finalReplyAction = replyAction;
-            final RemoteInput finalRemoteInput = remoteInput;
-
-            // Generate reply using Gemini
-            geminiService.generateReply(entity.getId(), entity.getContent(), new GeminiService.ResponseCallback() {
-                @Override
-                public void onPartialResponse(String text) {
-                    // Not needed for auto-reply
-                }
-
-                @Override
-                public void onComplete(String response) {
-                    try {
-                        // Create the remote input bundle
-                        Bundle resultsBundle = new Bundle();
-                        resultsBundle.putString(finalRemoteInput.getResultKey(), response);
-
-                        // Create intent to send the reply
-                        Intent intent = new Intent();
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        
-                        // Send the reply using the action
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            RemoteInput.addResultsToIntent(new RemoteInput[]{finalRemoteInput}, intent, resultsBundle);
-                        } else {
-                            Bundle wrapper = new Bundle();
-                            wrapper.putBundle(RemoteInput.RESULTS_CLIP_LABEL, resultsBundle);
-                            intent.putExtra(RemoteInput.EXTRA_RESULTS_DATA, wrapper);
-                        }
-                        
-                        finalReplyAction.actionIntent.send(NotificationService.this, 0, intent);
-                        
-                        // Record the sent message to prevent feedback loops
-                        SentMessageTracker.getInstance().recordSentMessage(response);
-
-                        // Update notification entity with auto-reply info
-                        executorService.execute(() -> {
-                            try {
-                                entity.setAutoReplied(true);
-                                entity.setAutoReplyContent(response);
-                                database.notificationDao().upsertNotification(entity);
-                    Log.i(TAG, "\n====== AUTO-REPLY SENT ======" +
-                        "\nNotification ID: " + entity.getId() +
-                        "\nConversation ID: " + entity.getConversationId() +
-                        "\nOriginal Message: " + entity.getContent() +
-                        "\nAuto-Reply: " + response +
-                        "\nTimestamp: " + new java.util.Date() +
-                        "\n===========================");
-                            } catch (Exception e) {
-                                Log.e(TAG, "Error updating notification after auto-reply", e);
-                            }
-                        });
-
-                    } catch (PendingIntent.CanceledException e) {
-                        Log.e(TAG, "Error sending auto-reply", e);
-                    }
-                }
-
-                @Override
-                public void onError(Throwable error) {
-                    Log.e(TAG, "Error generating auto-reply", error);
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error handling auto-reply", e);
         }
     }
 }

@@ -24,10 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 
-@OptIn(ExperimentalCoroutinesApi::class)
-class GeminiConfigActivity : AppCompatActivity() {
+ class GeminiConfigActivity : AppCompatActivity() {
     private companion object {
         private const val TAG = "GeminiConfigActivity"
         private const val DEFAULT_API_KEY = "AIzaSyBoLBIqECGckfiRALFxXrD50a_94oFvl-0"
@@ -311,7 +309,7 @@ class GeminiConfigActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) {
-            onBackPressedDispatcher.onBackPressed()
+            onBackPressed()
             return true
         }
         return super.onOptionsItemSelected(item)

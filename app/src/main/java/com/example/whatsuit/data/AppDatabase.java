@@ -14,7 +14,6 @@ import com.example.whatsuit.data.migrations.Migration10To11;
 import com.example.whatsuit.data.migrations.Migration11To12;
 import com.example.whatsuit.data.migrations.Migration12To13;
 import com.example.whatsuit.data.migrations.Migration13To14;
-import com.example.whatsuit.data.migrations.Migration14To15;
 
 @Database(
     entities = {
@@ -23,10 +22,9 @@ import com.example.whatsuit.data.migrations.Migration14To15;
         ConversationHistory.class,
         PromptTemplate.class,
         AppSettingEntity.class,
-        KeywordActionEntity.class,
-        AutoReplyRule.class
+        KeywordActionEntity.class
     },
-    version = 15,
+    version = 14,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -37,7 +35,6 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract AppSettingDao appSettingDao();
     public abstract ConversationHistoryDao conversationHistoryDao();
     public abstract KeywordActionDao keywordActionDao();
-    public abstract AutoReplyRuleDao autoReplyRuleDao();
 
     static final Migration MIGRATION_1_2 = new Migration(1, 2) {
         @Override
@@ -225,8 +222,7 @@ public abstract class AppDatabase extends RoomDatabase {
                             new Migration10To11(),
                             new Migration11To12(),
                             new Migration12To13(),
-                            new Migration13To14(),
-                            new Migration14To15()
+                            new Migration13To14()
                     )
                     .fallbackToDestructiveMigration()
                     .build();

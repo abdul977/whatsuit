@@ -1,16 +1,16 @@
 package com.example.whatsuit.util;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.MenuItem;
 import com.example.whatsuit.data.AppDatabase;
-import com.example.whatsuit.data.AutoReplyRule;
-import com.example.whatsuit.data.AutoReplyRuleDao;
 import com.example.whatsuit.data.NotificationEntity;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.lang.ref.WeakReference;
 
 public class AutoReplyManager {
+    private static final String TAG = "AutoReplyManager";
     private static volatile AutoReplyManager instance;
     private WeakReference<Context> contextRef;
     private volatile ExecutorService executor;
@@ -39,6 +39,10 @@ public class AutoReplyManager {
 
     public void setCurrentNotification(NotificationEntity notification) {
         this.currentNotification = notification;
+        Log.d(TAG, "Set current notification: " + 
+              "\nPackage: " + notification.getPackageName() + 
+              "\nTitle: " + notification.getTitle() + 
+              "\nContent: " + notification.getContent());
     }
 
     public void setMenuItem(MenuItem menuItem) {
@@ -50,24 +54,25 @@ public class AutoReplyManager {
         if (autoReplyMenuItem != null && currentNotification != null) {
             ExtractedInfo info = extractIdentifierInfo(currentNotification);
             
+            Log.d(TAG, "Updating menu title for notification: " + 
+                      "\nPackage: " + currentNotification.getPackageName() +
+                      "\nTitle: " + currentNotification.getTitle() +
+                      "\nExtracted Phone: " + info.phoneNumber +
+                      "\nTitle Prefix: " + info.titlePrefix);
+            
             executor.execute(() -> {
                 Context context = contextRef.get();
-                if (context == null) return;
-
-                String identifier;
-                String identifierType;
-                if (info.phoneNumber != null && !info.phoneNumber.isEmpty()) {
-                    identifier = info.phoneNumber;
-                    identifierType = AutoReplyRule.TYPE_PHONE_NUMBER;
-                } else {
-                    identifier = info.titlePrefix;
-                    identifierType = AutoReplyRule.TYPE_TITLE;
+                if (context == null) {
+                    Log.e(TAG, "Context is null when updating menu title");
+                    return;
                 }
-
-                boolean isDisabled = AppDatabase.getDatabase(context).autoReplyRuleDao()
+                boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
                     .isAutoReplyDisabled(currentNotification.getPackageName(), 
-                                       identifier, 
-                                       identifierType);
+                                     info.phoneNumber, 
+                                     info.titlePrefix);
+                
+                Log.d(TAG, "Auto-reply is currently " + (isDisabled ? "disabled" : "enabled") + 
+                          " for this chat");
                 
                 autoReplyMenuItem.setTitle(isDisabled ? "Enable Auto-Reply" : "Disable Auto-Reply");
             });
@@ -75,60 +80,57 @@ public class AutoReplyManager {
     }
 
     public void toggleAutoReply(AutoReplyCallback callback) {
-        if (currentNotification == null) return;
+        if (currentNotification == null) {
+            Log.e(TAG, "Cannot toggle auto-reply: current notification is null");
+            return;
+        }
         ExtractedInfo info = extractIdentifierInfo(currentNotification);
+        Log.d(TAG, "Toggling auto-reply for: " +
+                  "\nPackage: " + currentNotification.getPackageName() +
+                  "\nTitle: " + currentNotification.getTitle() +
+                  "\nPhone Number: " + info.phoneNumber +
+                  "\nTitle Prefix: " + info.titlePrefix);
         toggleAutoReply(currentNotification.getPackageName(), info.phoneNumber, info.titlePrefix, callback);
     }
 
     public void toggleAutoReply(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
         executor.execute(() -> {
             Context context = contextRef.get();
-            if (context == null) return;
+            if (context == null) {
+                Log.e(TAG, "Context is null when toggling auto-reply state");
+                return;
+            }
             AppDatabase db = AppDatabase.getDatabase(context);
-            AutoReplyRuleDao ruleDao = db.autoReplyRuleDao();
-
-            String identifier;
-            String identifierType;
-            if (phoneNumber != null && !phoneNumber.isEmpty()) {
-                identifier = phoneNumber;
-                identifierType = AutoReplyRule.TYPE_PHONE_NUMBER;
-            } else {
-                identifier = titlePrefix;
-                identifierType = AutoReplyRule.TYPE_TITLE;
-            }
-
-            AutoReplyRule rule = ruleDao.findRule(packageName, identifier, identifierType);
-            if (rule == null) {
-                // Create new rule
-                rule = new AutoReplyRule(packageName, identifier, identifierType, true);
-                ruleDao.insert(rule);
-            } else {
-                // Toggle existing rule
-                rule.setDisabled(!rule.isDisabled());
-                ruleDao.update(rule);
-            }
+            boolean currentState = db.notificationDao()
+                .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
             
-            callback.onStatusChanged(rule.isDisabled());
+            Log.d(TAG, "Toggling auto-reply state from " + (currentState ? "disabled" : "enabled") + 
+                      " to " + (!currentState ? "disabled" : "enabled") +
+                      "\nPackage: " + packageName +
+                      "\nPhone: " + phoneNumber +
+                      "\nTitle Prefix: " + titlePrefix);
+            
+            db.notificationDao()
+                .updateAutoReplyDisabled(packageName, phoneNumber, titlePrefix, !currentState);
+            
+            callback.onStatusChanged(!currentState);
         });
     }
 
     public void isAutoReplyDisabled(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
         executor.execute(() -> {
             Context context = contextRef.get();
-            if (context == null) return;
-            
-            String identifier;
-            String identifierType;
-            if (phoneNumber != null && !phoneNumber.isEmpty()) {
-                identifier = phoneNumber;
-                identifierType = AutoReplyRule.TYPE_PHONE_NUMBER;
-            } else {
-                identifier = titlePrefix;
-                identifierType = AutoReplyRule.TYPE_TITLE;
+            if (context == null) {
+                Log.e(TAG, "Context is null when checking auto-reply state");
+                return;
             }
-
-            boolean isDisabled = AppDatabase.getDatabase(context).autoReplyRuleDao()
-                .isAutoReplyDisabled(packageName, identifier, identifierType);
+            boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
+                .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
+            
+            Log.d(TAG, "Checking auto-reply state: " + (isDisabled ? "disabled" : "enabled") +
+                      "\nPackage: " + packageName +
+                      "\nPhone: " + phoneNumber +
+                      "\nTitle Prefix: " + titlePrefix);
             
             if (callback != null) {
                 callback.onStatusChanged(isDisabled);
@@ -147,29 +149,25 @@ public class AutoReplyManager {
     }
 
     private ExtractedInfo extractIdentifierInfo(NotificationEntity notification) {
-        String phoneNumber = "";
-        String titlePrefix = "";
+        Log.d(TAG, "Extracting identifier info for package: " + notification.getPackageName());
+        String title = notification.getTitle();
         
-        if (notification.getPackageName().contains("whatsapp") && 
-            notification.getContent() != null && 
-            notification.getContent().matches(".*[0-9+].*")) {
-            
-            String content = notification.getContent();
-            // Extract numbers, plus signs, and hyphens, then clean up
-            String extracted = content.replaceAll("[^0-9+\\-]", "");
-            // Remove all non-digits for final comparison
-            phoneNumber = extracted.replaceAll("[^0-9]", "");
+Log.d(TAG, "Original title: " + title);
+        
+        if (NotificationUtils.isWhatsAppPackage(notification.getPackageName()) && 
+            NotificationUtils.hasPhoneNumber(title)) {
+            String phoneNumber = NotificationUtils.normalizePhoneNumber(title);
+            Log.d(TAG, "WhatsApp notification with number in title, normalized phone: " + phoneNumber);
+            return new ExtractedInfo(phoneNumber, "");
         } else {
-            String title = notification.getTitle();
-            if (title != null && !title.isEmpty()) {
-                titlePrefix = title.substring(0, Math.min(10, title.length()));
-            }
+            String titlePrefix = NotificationUtils.getTitlePrefix(title);
+            Log.d(TAG, "Using title prefix for matching: " + titlePrefix);
+            return new ExtractedInfo("", titlePrefix);
         }
-        
-        return new ExtractedInfo(phoneNumber, titlePrefix);
     }
 
     public void shutdown() {
+        Log.d(TAG, "Shutting down AutoReplyManager");
         ExecutorService executorToShutdown = executor;
         if (executorToShutdown != null) {
             try {
@@ -177,6 +175,7 @@ public class AutoReplyManager {
                 executorToShutdown.submit(() -> {}).get();
                 executorToShutdown.shutdown();
             } catch (Exception e) {
+                Log.e(TAG, "Error during shutdown", e);
                 e.printStackTrace();
             }
             executor = null;
