@@ -16,16 +16,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        javaCompileOptions {
-            annotationProcessorOptions {
-                arguments += mapOf(
-                    "room.schemaLocation" to "$projectDir/schemas",
-                    "room.incremental" to "true",
-                    "kapt.kotlin.generated" to "true"
-                )
-            }
-        }
     }
 
     buildTypes {
@@ -55,6 +45,11 @@ android {
     kapt {
         correctErrorTypes = true
         useBuildCache = true
+        arguments {
+            arg("room.schemaLocation", "$projectDir/schemas")
+            arg("room.incremental", "true")
+            arg("kapt.kotlin.generated", "true")
+        }
     }
 }
 

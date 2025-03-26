@@ -889,7 +889,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     }
 
     private void showOptionsMenu() {
-        String[] options = {"Clear All", "Auto-Reply Settings", "Keyword Actions", "Gemini Configuration", "Settings", "About"};
+        String[] options = {"Clear All", "Auto-Reply Settings", "Gemini Configuration", "Settings", "About"};
         new AlertDialog.Builder(this)
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -900,10 +900,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                             startActivity(new Intent(this, AutoReplySettingsActivity.class));
                             break;
                         case 2:
-                            startActivity(new Intent(this, KeywordActionsActivity.class));
-                            break;
-                        case 3:
                             startActivity(new Intent(this, GeminiConfigActivity.class));
+ 
                             break;
                         case 4:
                             // TODO: Open general settings

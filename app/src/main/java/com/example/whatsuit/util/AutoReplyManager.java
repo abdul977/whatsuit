@@ -3,8 +3,11 @@ package com.example.whatsuit.util;
 import android.content.Context;
 import android.util.Log;
 import android.view.MenuItem;
+import com.example.whatsuit.data.AutoReplySettings;
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.NotificationEntity;
+import com.example.whatsuit.data.AutoReplySettings;
+import com.example.whatsuit.data.AutoReplySettingsDao;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.lang.ref.WeakReference;
@@ -66,10 +69,10 @@ public class AutoReplyManager {
                     Log.e(TAG, "Context is null when updating menu title");
                     return;
                 }
-                boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
-                    .isAutoReplyDisabled(currentNotification.getPackageName(), 
-                                     info.phoneNumber, 
-                                     info.titlePrefix);
+                AutoReplySettingsDao settingsDao = AppDatabase.getDatabase(context).autoReplySettingsDao();
+                AutoReplySettings settings = settingsDao.getByConversationIdBlocking(currentNotification.getConversationId());
+                
+                boolean isDisabled = settings != null && settings.isDisabled();
                 
                 Log.d(TAG, "Auto-reply is currently " + (isDisabled ? "disabled" : "enabled") + 
                           " for this chat");
@@ -90,28 +93,43 @@ public class AutoReplyManager {
                   "\nTitle: " + currentNotification.getTitle() +
                   "\nPhone Number: " + info.phoneNumber +
                   "\nTitle Prefix: " + info.titlePrefix);
-        toggleAutoReply(currentNotification.getPackageName(), info.phoneNumber, info.titlePrefix, callback);
+        
+        // Generate conversationId before async operation to avoid race condition
+        String conversationId = ConversationIdGenerator.generate(currentNotification);
+        Log.d(TAG, "Conversation ID comparison:" +
+                   "\nStored ID: " + currentNotification.getConversationId() +
+                   "\nGenerated ID: " + conversationId +
+                   "\nTitle: " + currentNotification.getTitle() +
+                   "\nPrefix: " + info.titlePrefix);
+        
+        toggleAutoReply(currentNotification.getPackageName(), info.phoneNumber, info.titlePrefix, conversationId, callback);
     }
 
-    public void toggleAutoReply(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
+    public void toggleAutoReply(String packageName, String phoneNumber, String titlePrefix, String conversationId, AutoReplyCallback callback) {
         executor.execute(() -> {
+            if (conversationId == null) {
+                Log.e(TAG, "Cannot toggle auto-reply: conversation ID is null");
+                return;
+            }
             Context context = contextRef.get();
             if (context == null) {
                 Log.e(TAG, "Context is null when toggling auto-reply state");
                 return;
             }
             AppDatabase db = AppDatabase.getDatabase(context);
-            boolean currentState = db.notificationDao()
-                .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
+            AutoReplySettingsDao settingsDao = db.autoReplySettingsDao();
+            AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
+            
+            boolean currentState = settings != null && settings.isDisabled();
             
             Log.d(TAG, "Toggling auto-reply state from " + (currentState ? "disabled" : "enabled") + 
                       " to " + (!currentState ? "disabled" : "enabled") +
-                      "\nPackage: " + packageName +
-                      "\nPhone: " + phoneNumber +
-                      "\nTitle Prefix: " + titlePrefix);
+                      "\nConversation ID: " + conversationId);
             
-            db.notificationDao()
-                .updateAutoReplyDisabled(packageName, phoneNumber, titlePrefix, !currentState);
+            settingsDao.upsertBlocking(new AutoReplySettings(
+                conversationId, 
+                !currentState,
+                System.currentTimeMillis()));
             
             callback.onStatusChanged(!currentState);
         });
@@ -120,17 +138,33 @@ public class AutoReplyManager {
     public void isAutoReplyDisabled(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
         executor.execute(() -> {
             Context context = contextRef.get();
+            // Add validation logging
+            Log.d(TAG, "isAutoReplyDisabled called with:" +
+                      "\nPackage: " + packageName +
+                      "\nPhone: " + phoneNumber +
+                      "\nTitle Prefix: " + titlePrefix);
+
             if (context == null) {
                 Log.e(TAG, "Context is null when checking auto-reply state");
                 return;
             }
-            boolean isDisabled = AppDatabase.getDatabase(context).notificationDao()
-                .isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
+            
+            String conversationId = ConversationIdGenerator.generate(packageName, phoneNumber, titlePrefix);
+            
+            Log.d(TAG, "Checking auto-reply state for conversation:" +
+                      "\nID: " + conversationId +
+                      "\nOriginal Title: " + titlePrefix);
+            
+            AutoReplySettingsDao settingsDao = AppDatabase.getDatabase(context).autoReplySettingsDao();
+            AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
+            
+            boolean isDisabled = settings != null && settings.isDisabled();
             
             Log.d(TAG, "Checking auto-reply state: " + (isDisabled ? "disabled" : "enabled") +
                       "\nPackage: " + packageName +
                       "\nPhone: " + phoneNumber +
-                      "\nTitle Prefix: " + titlePrefix);
+                      "\nTitle Prefix: " + titlePrefix +
+                      "\nConversation ID: " + conversationId);
             
             if (callback != null) {
                 callback.onStatusChanged(isDisabled);
@@ -152,8 +186,8 @@ public class AutoReplyManager {
         Log.d(TAG, "Extracting identifier info for package: " + notification.getPackageName());
         String title = notification.getTitle();
         
-Log.d(TAG, "Original title: " + title);
-        
+        Log.d(TAG, "Original title: " + title);
+
         if (NotificationUtils.isWhatsAppPackage(notification.getPackageName()) && 
             NotificationUtils.hasPhoneNumber(title)) {
             String phoneNumber = NotificationUtils.normalizePhoneNumber(title);

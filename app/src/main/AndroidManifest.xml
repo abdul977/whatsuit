@@ -71,11 +71,6 @@
             android:label="Gemini Configuration"
             android:parentActivityName=".MainActivity" />
 
-        <activity
-            android:name=".KeywordActionsActivity"
-            android:exported="false"
-            android:label="Keyword Actions"
-            android:parentActivityName=".MainActivity" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -27,6 +27,7 @@ import com.example.whatsuit.data.AppSettingEntity;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.service.GeminiService;
 import com.example.whatsuit.util.SentMessageTracker;
+import com.example.whatsuit.data.AutoReplySettings;
 import com.example.whatsuit.util.ConversationIdGenerator;
 import com.example.whatsuit.util.NotificationUtils;
 
@@ -154,7 +155,8 @@ public class NotificationService extends NotificationListenerService {
                 titlePrefix = NotificationUtils.getTitlePrefix(entity.getTitle());
             }
             
-            if (database.notificationDao().isAutoReplyDisabled(entity.getPackageName(), phoneNumber, titlePrefix)) {
+            AutoReplySettings settings = database.autoReplySettingsDao().getByConversationIdBlocking(entity.getConversationId());
+            if (settings != null && settings.isDisabled()) {
                 Log.d(TAG, "Auto-reply is disabled for this conversation, skipping reply");
                 return;
             }

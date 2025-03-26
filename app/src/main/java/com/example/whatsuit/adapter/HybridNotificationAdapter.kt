@@ -19,6 +19,8 @@ import com.example.whatsuit.NotificationDetailActivity
 import com.example.whatsuit.R
 import com.example.whatsuit.data.NotificationEntity
 import com.example.whatsuit.util.AutoReplyManager
+import com.example.whatsuit.util.NotificationUtils
+import com.example.whatsuit.util.ConversationIdGenerator
 import com.google.android.material.chip.Chip
 
 class HybridNotificationAdapter(
@@ -168,10 +170,13 @@ class HybridNotificationAdapter(
 
     private fun toggleAutoReply(notification: NotificationEntity) {
         val info = extractIdentifierInfo(notification)
+        val conversationId = ConversationIdGenerator.generate(notification)
         autoReplyManager.toggleAutoReply(
             notification.packageName,
             info.phoneNumber,
             info.titlePrefix
+,
+            conversationId
         ) { _ ->
             mainHandler.post { notifyDataSetChanged() }
         }
@@ -217,25 +222,14 @@ class HybridNotificationAdapter(
         if (notification.packageName.contains("whatsapp") && 
             notification.title?.matches(Regex(".*[0-9+].*")) == true) {
             try {
-                val content = notification.title
-                val extracted = content.replace(Regex("[^0-9+\\-]"), "")
-                val fullNumber = extracted.replace(Regex("[^0-9]"), "")
-                // Take first 11 digits if available
-                phoneNumber = if (fullNumber.length >= 11) {
-                    fullNumber.substring(0, 11)
-                } else {
-                    fullNumber
-                }
+                phoneNumber = NotificationUtils.normalizePhoneNumber(notification.title!!)
             } catch (e: Exception) {
                 // Fallback to title prefix
-                titlePrefix = notification.title?.let { 
-                    if (it.length >= 5) it.substring(0, 5) else it 
-                } ?: ""
+                titlePrefix = NotificationUtils.getTitlePrefix(notification.title ?: "")
             }
         } else {
-            titlePrefix = notification.title?.let { 
-                if (it.length >= 5) it.substring(0, 5) else it 
-            } ?: ""
+            titlePrefix = NotificationUtils.getTitlePrefix(notification.title ?: ""
+)
         }
         
         return IdentifierInfo(phoneNumber, titlePrefix)

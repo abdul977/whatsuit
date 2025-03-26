@@ -26,6 +26,10 @@ public class ConversationIdGenerator {
             return "";
         }
 
+        Log.d(TAG, "Generating ID from NotificationEntity:" +
+                   "\nPackage: " + entity.getPackageName() +
+                   "\nTitle: " + entity.getTitle());
+
         String conversationId;
         
         if (NotificationUtils.isWhatsAppPackage(entity.getPackageName())) {
@@ -36,7 +40,7 @@ public class ConversationIdGenerator {
                 Log.d(TAG, "Generated WhatsApp phone number based ID: " + conversationId);
             } else {
                 // For contact names, normalize by converting to lowercase and replacing spaces with underscores
-                String normalizedName = title.trim().toLowerCase().replaceAll("\\s+", "_");
+                String normalizedName = NotificationUtils.getTitlePrefix(title).replaceAll("\\s+", "_");
                 conversationId = "whatsapp_contact_" + normalizedName;
                 Log.d(TAG, "Generated WhatsApp contact name based ID: " + conversationId);
             }
@@ -47,6 +51,54 @@ public class ConversationIdGenerator {
             Log.d(TAG, "Generated generic app ID: " + conversationId);
         }
 
+        Log.d(TAG, "Result of generate(NotificationEntity):" +
+                   "\nInput title: " + entity.getTitle() +
+                   "\nResult ID: " + conversationId);
+
+        return conversationId;
+    }
+    
+    /**
+     * Generates a consistent conversation ID from individual parameters.
+     * For WhatsApp notifications with phone numbers, format is "whatsapp_[normalized_number]"
+     * For WhatsApp notifications without phone numbers, format is "whatsapp_contact_[normalized_name]"
+     * For other apps, format is "[package_name]_[normalized_title]"
+     *
+     * @param packageName The package name of the app
+     * @param phoneNumber The phone number (for WhatsApp notifications)
+     * @param titlePrefix The title prefix for non-WhatsApp notifications
+     * @return A consistent conversation ID string
+     */
+    public static String generate(String packageName, String phoneNumber, String titlePrefix) {
+        if (packageName == null) {
+            Log.w(TAG, "Cannot generate conversation ID for null package name");
+            return "";
+        }
+
+        Log.d(TAG, "Generating ID from parameters:" +
+                   "\nPackage: " + packageName +
+                   "\nPhone: " + phoneNumber +
+                   "\nTitle: " + titlePrefix);
+
+        String conversationId;
+        
+        if (NotificationUtils.isWhatsAppPackage(packageName)) {
+            if (phoneNumber != null && !phoneNumber.isEmpty()) {
+                String normalizedNumber = NotificationUtils.normalizePhoneNumber(phoneNumber);
+                conversationId = "whatsapp_" + normalizedNumber;
+                Log.d(TAG, "Generated WhatsApp phone number based ID: " + conversationId);
+            } else {
+                conversationId = "whatsapp_contact_" + NotificationUtils.getTitlePrefix(titlePrefix).replaceAll("\\s+", "_");
+                Log.d(TAG, "Generated WhatsApp contact name based ID: " + conversationId);
+            }
+        } else {
+            conversationId = packageName + "_" + titlePrefix.trim().toLowerCase().replaceAll("\\s+", "_");
+            Log.d(TAG, "Generated generic app ID: " + conversationId);
+        }
+        
+        Log.d(TAG, "Result of generate(params):" +
+                   "\nInput title: " + titlePrefix +
+                   "\nResult ID: " + conversationId);
         return conversationId;
     }
 }

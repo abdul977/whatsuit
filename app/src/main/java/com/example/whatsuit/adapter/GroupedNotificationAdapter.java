@@ -156,10 +156,12 @@ public class GroupedNotificationAdapter extends RecyclerView.Adapter<RecyclerVie
 
     private void toggleAutoReply(NotificationEntity notification) {
         ExtractedInfo info = extractIdentifierInfo(notification);
+        String conversationId = notification.getConversationId();
         autoReplyManager.toggleAutoReply(
             notification.getPackageName(), 
             info.phoneNumber, 
-            info.titlePrefix, 
+            info.titlePrefix,
+            conversationId,
             isDisabled -> {
                 // Use main handler to post UI updates
                 mainHandler.post(() -> notifyDataSetChanged());

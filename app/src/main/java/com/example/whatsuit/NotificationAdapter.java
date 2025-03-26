@@ -1,6 +1,7 @@
 package com.example.whatsuit;
 
 import android.content.Intent;
+import android.util.Log;
 import android.view.MenuItem;
 import android.content.pm.PackageManager;
 import android.os.Handler;
@@ -25,6 +26,8 @@ import com.google.android.material.chip.Chip;
 
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.util.AutoReplyManager;
+import com.example.whatsuit.util.ConversationIdGenerator;
+import com.example.whatsuit.util.NotificationUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 
 public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder> {
+    private static final String TAG = NotificationAdapter.class.getSimpleName();
+
     private List<NotificationEntity> notifications = new ArrayList<>();
     private List<NotificationEntity> allNotifications = new ArrayList<>();
     private AutoReplyManager autoReplyManager;
@@ -196,10 +201,19 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
 
     private void toggleAutoReply(NotificationEntity notification) {
         ExtractedInfo info = extractIdentifierInfo(notification);
+        // Log both the stored and generated IDs to verify if they match
+        String conversationId = notification.getConversationId();
+        String generatedId = ConversationIdGenerator.generate(notification);
+        
+        Log.d(TAG, "Toggling auto-reply:" +
+            "\nStored ID: " + conversationId +
+            "\nGenerated ID: " + generatedId +
+            "\nTitle: " + notification.getTitle());
         autoReplyManager.toggleAutoReply(
             notification.getPackageName(),
             info.phoneNumber,
             info.titlePrefix,
+            generatedId,
             isDisabled -> mainHandler.post(this::notifyDataSetChanged)
         );
     }
@@ -238,17 +252,12 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             notification.getTitle() != null && 
             notification.getTitle().matches(".*[0-9+].*")) {
             try {
-                String content = notification.getTitle();
-                String extracted = content.replaceAll("[^0-9+\\-]", "");
-                String fullNumber = extracted.replaceAll("[^0-9]", "");
-                phoneNumber = fullNumber.length() >= 11 ? fullNumber.substring(0, 11) : fullNumber;
+                phoneNumber = NotificationUtils.normalizePhoneNumber(notification.getTitle());
             } catch (Exception e) {
-                titlePrefix = notification.getTitle() != null && notification.getTitle().length() >= 5 ?
-                    notification.getTitle().substring(0, 5) : notification.getTitle();
+                titlePrefix = NotificationUtils.getTitlePrefix(notification.getTitle());
             }
         } else {
-            titlePrefix = notification.getTitle() != null && notification.getTitle().length() >= 5 ?
-                notification.getTitle().substring(0, 5) : notification.getTitle();
+            titlePrefix = NotificationUtils.getTitlePrefix(notification.getTitle());
         }
         
         return new ExtractedInfo(phoneNumber, titlePrefix);
