@@ -33,11 +33,11 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         android.util.Log.d(TAG, "onCreate - starting");
-        
+
         // Postpone transitions until content is ready
         android.util.Log.d(TAG, "postponing enter transition");
         postponeEnterTransition();
-        
+
         setContentView(R.layout.activity_notification_detail);
 
         initializeViews();
@@ -72,7 +72,7 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
 
     private void setupViewModel() {
         viewModel = new ViewModelProvider(this).get(NotificationDetailViewModel.class);
-        
+
         viewModel.getCurrentNotification().observe(this, notification -> {
             if (notification != null) {
                 titleTextView.setText(notification.getTitle());
@@ -147,10 +147,11 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     }
 
     private void setupHelpers() {
-        timeFilterHelper = new TimeFilterHelper(this, (startTime, endTime, displayText) -> 
+        timeFilterHelper = new TimeFilterHelper(this, (startTime, endTime, displayText) ->
             viewModel.filterNotificationsByTimeRange(startTime, endTime));
 
-        autoReplyManager = new AutoReplyManager(this);
+        // Use the singleton pattern to get the AutoReplyManager instance
+        autoReplyManager = AutoReplyManager.getInstance(this);
     }
 
     @Override
@@ -187,7 +188,7 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
             timeFilterHelper.showTimeFilterDialog();
             return true;
         } else if (itemId == R.id.action_toggle_auto_reply) {
-            autoReplyManager.toggleAutoReply(isDisabled -> 
+            autoReplyManager.toggleAutoReply(isDisabled ->
                 // Update UI if needed based on new auto-reply status
                 invalidateOptionsMenu()
             );
@@ -199,45 +200,45 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     private void showAddConversationDialog() {
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_conversation, null);
-        
+
         android.widget.EditText messageEditText = dialogView.findViewById(R.id.messageEditText);
         android.widget.EditText responseEditText = dialogView.findViewById(R.id.responseEditText);
         android.widget.Button cancelButton = dialogView.findViewById(R.id.cancelButton);
         android.widget.Button addButton = dialogView.findViewById(R.id.addButton);
-        
+
         android.app.AlertDialog dialog = builder.setView(dialogView).create();
-        
+
         cancelButton.setOnClickListener(v -> dialog.dismiss());
-        
+
         addButton.setOnClickListener(v -> {
             String message = messageEditText.getText().toString().trim();
             String response = responseEditText.getText().toString().trim();
-            
+
             if (!message.isEmpty() || !response.isEmpty()) {
                 viewModel.createConversation(message, response);
                 dialog.dismiss();
             }
         });
-        
+
         dialog.show();
     }
 
     private void showEditConversationDialog(ConversationHistory conversation) {
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_conversation, null);
-        
+
         android.widget.EditText messageEditText = dialogView.findViewById(R.id.messageEditText);
         android.widget.EditText responseEditText = dialogView.findViewById(R.id.responseEditText);
-        
+
         messageEditText.setText(conversation.getMessage());
         responseEditText.setText(conversation.getResponse());
-        
+
         builder.setView(dialogView)
                .setTitle("Edit Conversation")
                .setPositiveButton("Save", (dialog, which) -> {
                    String message = messageEditText.getText().toString().trim();
                    String response = responseEditText.getText().toString().trim();
-                   
+
                    if (!message.isEmpty() || !response.isEmpty()) {
                        viewModel.editConversation(conversation, message, response);
                    }
@@ -259,7 +260,7 @@ public class NotificationDetailActivity extends AppCompatActivity implements Aut
     protected void onDestroy() {
         super.onDestroy();
         android.util.Log.d(TAG, "Activity destroying, cleaning up resources");
-        
+
         // Cleanup AutoReplyManager
         if (autoReplyManager != null) {
             autoReplyManager.shutdown();

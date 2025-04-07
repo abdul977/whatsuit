@@ -99,7 +99,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                     if (appContext == null) {
                         appContext = getApplicationContext();
                     }
-                    manager = new AutoReplyManager(appContext);
+                    // Use the static getInstance method to ensure singleton pattern
+                    manager = AutoReplyManager.getInstance(appContext);
                     autoReplyManager = manager;
                 }
             }
@@ -177,7 +178,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                     if (appContext == null) {
                         appContext = getApplicationContext();
                     }
-                    autoReplyManager = new AutoReplyManager(appContext);
+                    // Use the static getInstance method to ensure singleton pattern
+                    autoReplyManager = AutoReplyManager.getInstance(appContext);
                 } catch (Exception e) {
                     Log.e("MainActivity", "AutoReplyManager initialization failed", e);
                     // Continue without auto-reply functionality
