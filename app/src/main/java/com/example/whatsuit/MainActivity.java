@@ -57,10 +57,11 @@ import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistoryDao;
 import com.example.whatsuit.util.AutoReplyManager;
+import com.example.whatsuit.util.SearchUtil;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.example.whatsuit.adapter.GroupedNotificationAdapter;
+
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
@@ -73,21 +74,37 @@ import java.util.Calendar;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements AutoReplyProvider {
-    // Animation related fields
-    private boolean isAppReady = false;
+    // State and animation related fields
+    private volatile boolean isAppReady = false;
+    private volatile boolean isDatabaseReady = false;
+    private volatile boolean isSplashComplete = false;
     private View splashOverlay;
     private ImageView splashIcon;
     private ProgressBar splashProgress;
     private TextView splashText;
     private RecyclerView recyclerView;
-    private GroupedNotificationAdapter notificationAdapter;
     private TextView emptyView;
     private NotificationDao notificationDao;
     private ConversationHistoryDao conversationHistoryDao;
-    protected AutoReplyManager autoReplyManager;
-    
+    private volatile AutoReplyManager autoReplyManager;
+    private volatile Context appContext;
+    private final Object autoReplyLock = new Object();
+
     public AutoReplyManager getAutoReplyManager() {
-        return autoReplyManager;
+        AutoReplyManager manager = autoReplyManager;
+        if (manager == null) {
+            synchronized (autoReplyLock) {
+                manager = autoReplyManager;
+                if (manager == null) {
+                    if (appContext == null) {
+                        appContext = getApplicationContext();
+                    }
+                    manager = new AutoReplyManager(appContext);
+                    autoReplyManager = manager;
+                }
+            }
+        }
+        return manager;
     }
     private androidx.appcompat.widget.Toolbar toolbar;
     private FloatingActionButton fab;
@@ -102,24 +119,27 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     protected void onCreate(Bundle savedInstanceState) {
         // Install splash screen and keep it visible during initialization
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
-        splashScreen.setKeepOnScreenCondition(() -> !isAppReady);
-        
+        splashScreen.setKeepOnScreenCondition(() -> !isSplashComplete);
+
         super.onCreate(savedInstanceState);
-        
+
         // Set up our custom splash overlay first
         setContentView(R.layout.splash_screen_overlay);
-        
+
         // Initialize splash screen views
         splashOverlay = findViewById(android.R.id.content);
         splashIcon = findViewById(R.id.splash_icon);
         splashProgress = findViewById(R.id.splash_progress);
         splashText = findViewById(R.id.splash_text);
-        
+
         // Start initialization process in background
         initializeApp();
     }
-    
+
     private void initializeApp() {
+        // Cache application context
+        appContext = getApplicationContext();
+
         // Simulate app initialization in background thread
         new Thread(() -> {
             try {
@@ -127,7 +147,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 AppDatabase db = null;
                 int retryCount = 0;
                 final int MAX_RETRIES = 3;
-                
+
                 while (retryCount < MAX_RETRIES && db == null) {
                     try {
                         db = AppDatabase.getDatabase(this);
@@ -141,30 +161,41 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                         }
                     }
                 }
-                
+
                 if (db == null) {
                     throw new RuntimeException("Failed to initialize database after " + MAX_RETRIES + " attempts");
                 }
 
                 notificationDao = db.notificationDao();
                 conversationHistoryDao = db.conversationHistoryDao();
-                
-                // Initialize managers with error handling
+
+                // Initialize SearchUtil
+                SearchUtil.INSTANCE.initialize(db);
+
+                // Initialize AutoReplyManager with application context
                 try {
-                    autoReplyManager = new AutoReplyManager(this);
+                    if (appContext == null) {
+                        appContext = getApplicationContext();
+                    }
+                    autoReplyManager = new AutoReplyManager(appContext);
                 } catch (Exception e) {
                     Log.e("MainActivity", "AutoReplyManager initialization failed", e);
                     // Continue without auto-reply functionality
                 }
-                
-                // Delay for splash animation
-                Thread.sleep(1200);
-                
-                // Signal successful completion
+
+                // Mark database initialization complete
+                isDatabaseReady = true;
+
+                // Short delay to ensure smooth transition
+                Thread.sleep(500);
+
+                // Signal successful completion on main thread
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    startSplashAnimations();
-                    // Show success message
-                    Toast.makeText(this, "Initialization successful", Toast.LENGTH_SHORT).show();
+                    if (!isFinishing()) {
+                        isAppReady = true;
+                        startSplashAnimations();
+                        Toast.makeText(this, "Initialization successful", Toast.LENGTH_SHORT).show();
+                    }
                 });
             } catch (Exception e) {
                 Log.e("MainActivity", "Critical error during initialization", e);
@@ -186,19 +217,26 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             }
         }).start();
     }
-    
+
     private void startSplashAnimations() {
-        // Mark app as ready (this removes the system splash screen)
+        // Mark app ready but keep splash visible
         isAppReady = true;
-        
+
+        // Add delay before starting exit animation
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isFinishing() && isDatabaseReady) {
+                isSplashComplete = true;
+            }
+        }, 100);
+
         // Start pulse animation on icon
         ObjectAnimator scaleX = ObjectAnimator.ofFloat(splashIcon, View.SCALE_X, 1f, 1.2f, 1f);
         ObjectAnimator scaleY = ObjectAnimator.ofFloat(splashIcon, View.SCALE_Y, 1f, 1.2f, 1f);
-        
+
         AnimatorSet pulseSet = new AnimatorSet();
         pulseSet.playTogether(scaleX, scaleY);
         pulseSet.setDuration(1000);
-        
+
         // After pulse, trigger particle animation
         pulseSet.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -206,16 +244,16 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 // Hide progress and text
                 splashProgress.animate().alpha(0f).setDuration(300).start();
                 splashText.animate().alpha(0f).setDuration(300).start();
-                
+
                 // Create particle animation
                 createParticleEffect();
             }
         });
-        
+
         // Start the animation sequence
         pulseSet.start();
     }
-    
+
     private void createParticleEffect() {
         // Simple fade out animation
         ObjectAnimator fadeOut = ObjectAnimator.ofFloat(splashIcon, View.ALPHA, 1f, 0f);
@@ -228,43 +266,43 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         });
         fadeOut.start();
     }
-    
+
     private void switchToMainContent() {
         // Enable edge-to-edge and set main layout
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        
+
         // Initialize views from regular layout
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
         toolbar = findViewById(R.id.toolbar);
-        
+
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
         if (fab != null) {
             fab.setScaleX(0f);
             fab.setScaleY(0f);
         }
-        
+
         // Get the center point for circular reveal
         View rootView = findViewById(android.R.id.content);
-        
+
         // Wait for layout to be ready
         rootView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
             public boolean onPreDraw() {
                 rootView.getViewTreeObserver().removeOnPreDrawListener(this);
-                
+
                 // Perform circular reveal animation
                 int cx = rootView.getWidth() / 2;
                 int cy = rootView.getHeight() / 2;
                 float finalRadius = (float) Math.hypot(cx, cy);
-                
+
                 Animator circularReveal = ViewAnimationUtils.createCircularReveal(
                         rootView, cx, cy, 0f, finalRadius);
                 circularReveal.setDuration(800);
                 circularReveal.setInterpolator(new DecelerateInterpolator());
-                
+
                 circularReveal.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
@@ -283,8 +321,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             .alpha(1f)
             .setDuration(300)
             .start();
-        
-        
+
+
         // Animate FAB with additional delay and overshoot
         if (fab != null) {
             fab.animate()
@@ -295,11 +333,11 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 .setInterpolator(new OvershootInterpolator())
                 .start();
         }
-        
+
         // Continue with regular MainActivity initialization
         finishMainActivityInitialization();
     }
-    
+
     private SearchView searchView;
     private NotificationsViewModel notificationsViewModel;
 
@@ -352,11 +390,11 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         new Thread(() -> {
             final AppDatabase db = AppDatabase.getDatabase(this);
             final long notificationId = notification.getId();
-            
+
             // Get conversation history directly using Room's synchronous query
             final List<ConversationHistory> history = db.getConversationHistoryDao()
                     .getHistoryForNotificationSync(notificationId);
-            
+
             // Update UI on main thread
             runOnUiThread(() -> {
                 if (history != null && !history.isEmpty()) {
@@ -380,15 +418,15 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
-        
+
         MenuItem searchItem = menu.findItem(R.id.action_search);
         searchView = (SearchView) searchItem.getActionView();
-        
+
         // Restore search expanded state
         if (isSearchExpanded) {
             searchItem.expandActionView();
         }
-        
+
         // Configure SearchView
         searchView.setQueryHint(getString(R.string.search_notifications_hint));
         searchView.setMaxWidth(Integer.MAX_VALUE);
@@ -396,7 +434,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         searchView.setQueryRefinementEnabled(true);
         searchView.setBackground(getDrawable(R.drawable.search_filter_background));
         searchView.setContentDescription(getString(R.string.search_notifications));
-        
+
         // Style the search text and icon colors
         int searchPlateId = searchView.getContext().getResources()
                 .getIdentifier("android:id/search_src_text", null, null);
@@ -442,8 +480,11 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             public boolean onQueryTextChange(String newText) {
                 // Don't search on empty string
                 if (newText == null || newText.trim().isEmpty()) {
+                    Log.d("SearchFlow", "[MainActivity] Search query cleared");
                     notificationsViewModel.setSearchQuery("");
                 } else {
+                    Log.d("SearchFlow", "[MainActivity] Search started: '" + newText.trim() + "'");
+                    Log.d("SearchFlow", "[MainActivity] Current activity: " + getClass().getSimpleName());
                     notificationsViewModel.setSearchQuery(newText.trim());
                 }
                 return true;
@@ -547,7 +588,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         } catch (PackageManager.NameNotFoundException e) {
             Log.e("MainActivity", "Error getting version", e);
         }
-        
+
         new AlertDialog.Builder(this)
             .setTitle("About WhatSuit")
             .setMessage("Version " + version + "\n\n" +
@@ -654,14 +695,16 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             // Create new observer
             notificationsObserver = notifications -> {
                 try {
+                    // Notifications are now handled by the fragment
+                    Log.d("MainActivity", "Notifications are handled by NotificationsFragment");
+
+                    // Update visibility of views if needed
                     if (notifications != null && !notifications.isEmpty()) {
-                        notificationAdapter.updateNotifications(notifications);
-                        emptyView.setVisibility(View.GONE);
-                        recyclerView.setVisibility(View.VISIBLE);
+                        if (emptyView != null) emptyView.setVisibility(View.GONE);
+                        if (recyclerView != null) recyclerView.setVisibility(View.VISIBLE);
                     } else {
-                        notificationAdapter.updateNotifications(new ArrayList<>());
-                        emptyView.setVisibility(View.VISIBLE);
-                        recyclerView.setVisibility(View.GONE);
+                        if (emptyView != null) emptyView.setVisibility(View.VISIBLE);
+                        if (recyclerView != null) recyclerView.setVisibility(View.GONE);
                     }
                 } catch (Exception e) {
                     Log.e("MainActivity", "Error updating notifications", e);
@@ -704,44 +747,44 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 .setCancelable(false)
                 .show();
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
-        
+
         // Check notification permission and restart service if needed
         if (isNotificationServiceEnabled()) {
             ensureNotificationServiceRunning();
         }
     }
-    
+
     private void ensureNotificationServiceRunning() {
         // Toggle notification listener service to ensure it gets rebound
         toggleNotificationListenerService();
-        
+
         // Start service explicitly
         Intent serviceIntent = new Intent(this, NotificationService.class);
         startService(serviceIntent);
-        
+
         Log.d("MainActivity", "Ensuring notification service is running");
     }
-    
+
     private void toggleNotificationListenerService() {
         // This is a workaround to force Android to rebind the notification listener service
         // Toggling the enabled state forces Android to rebind the service
         ComponentName componentName = new ComponentName(this, NotificationService.class);
-        
+
         // Get package manager
         PackageManager pm = getPackageManager();
-        
+
         // Disable component
         pm.setComponentEnabledSetting(componentName,
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
-        
+
         // Enable component
         pm.setComponentEnabledSetting(componentName,
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
-        
+
         Log.d("MainActivity", "Toggled notification listener service");
     }
 
@@ -788,7 +831,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                     final ConversationHistory history = AppDatabase.getDatabase(this)
                         .getConversationHistoryDao()
                         .getLatestHistoryForConversationSync(notification.getConversationId());
-                    
+
                     // Update UI on main thread
                     runOnUiThread(() -> {
                         if (history != null) {
@@ -834,7 +877,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 final ConversationHistory history = AppDatabase.getDatabase(this)
                     .getConversationHistoryDao()
                     .getLatestHistoryForConversationSync(notification.getConversationId());
-                
+
                 runOnUiThread(() -> {
                     if (history != null) {
                         if (history.getAnalysis() == null) {
@@ -855,7 +898,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         }).start();
 
         // Re-analyze button click handler
-        reAnalyzeButton.setOnClickListener(v -> 
+        reAnalyzeButton.setOnClickListener(v ->
             performAnalysis(notification.getConversationId(), updateAnalysis));
 
         dialog.show();
@@ -872,14 +915,14 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                 public void onComplete(String fullResponse) {
                     runOnUiThread(() -> {
                         onComplete.run();
-                        Toast.makeText(MainActivity.this, 
+                        Toast.makeText(MainActivity.this,
                             "Analysis complete", Toast.LENGTH_SHORT).show();
                     });
                 }
 
                 @Override
                 public void onError(Throwable error) {
-                    runOnUiThread(() -> 
+                    runOnUiThread(() ->
                         Toast.makeText(MainActivity.this,
                             "Analysis failed: " + error.getMessage(),
                             Toast.LENGTH_LONG).show());
@@ -901,7 +944,7 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
                             break;
                         case 2:
                             startActivity(new Intent(this, GeminiConfigActivity.class));
- 
+
                             break;
                         case 4:
                             // TODO: Open general settings
@@ -947,8 +990,12 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (autoReplyManager != null) {
-            autoReplyManager.shutdown();
+        synchronized (autoReplyLock) {
+            if (autoReplyManager != null) {
+                autoReplyManager.shutdown();
+                autoReplyManager = null;
+            }
         }
+        appContext = null;
     }
 }
