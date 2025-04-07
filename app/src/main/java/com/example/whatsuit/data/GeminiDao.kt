@@ -16,16 +16,16 @@ interface GeminiDao {
             SELECT n.id, n.conversationId, n.timestamp
             FROM notifications n
             WHERE n.id = :notificationId
-            
+
             UNION ALL
-            
+
             -- Get related notifications in same conversation
             SELECT n.id, n.conversationId, n.timestamp
             FROM notifications n
             INNER JOIN ConversationThread ct ON n.conversationId = ct.conversationId
             WHERE n.timestamp < ct.timestamp
         )
-        SELECT ch.* 
+        SELECT ch.*
         FROM conversation_history ch
         INNER JOIN ConversationThread ct ON ch.notificationId = ct.id
         ORDER BY ch.timestamp DESC
@@ -62,9 +62,9 @@ interface GeminiDao {
 
     // Conversation History operations
     @Query("""
-        SELECT * FROM conversation_history 
-        WHERE notificationId = :notificationId 
-        ORDER BY timestamp DESC 
+        SELECT * FROM conversation_history
+        WHERE notificationId = :notificationId
+        ORDER BY timestamp DESC
         LIMIT :limit
     """)
     suspend fun getConversationHistory(
@@ -76,12 +76,12 @@ interface GeminiDao {
     suspend fun insertConversation(history: ConversationHistory): Long
 
     @Query("""
-        DELETE FROM conversation_history 
-        WHERE notificationId = :notificationId 
+        DELETE FROM conversation_history
+        WHERE notificationId = :notificationId
         AND id NOT IN (
-            SELECT id FROM conversation_history 
-            WHERE notificationId = :notificationId 
-            ORDER BY timestamp DESC 
+            SELECT id FROM conversation_history
+            WHERE notificationId = :notificationId
+            ORDER BY timestamp DESC
             LIMIT :keepCount
         )
     """)
@@ -89,14 +89,14 @@ interface GeminiDao {
         notificationId: Long,
         keepCount: Int
     )
-    
+
     @Query("""
-        DELETE FROM conversation_history 
-        WHERE notificationId = :notificationId 
+        DELETE FROM conversation_history
+        WHERE notificationId = :notificationId
         AND id NOT IN (
-            SELECT id FROM conversation_history 
-            WHERE notificationId = :notificationId 
-            ORDER BY timestamp DESC 
+            SELECT id FROM conversation_history
+            WHERE notificationId = :notificationId
+            ORDER BY timestamp DESC
             LIMIT :keepCount
         )
     """)
@@ -110,8 +110,8 @@ interface GeminiDao {
 
     // Get recent conversations (last 24 hours) for context
     @Query("""
-        SELECT * FROM conversation_history 
-        WHERE notificationId = :notificationId 
+        SELECT * FROM conversation_history
+        WHERE notificationId = :notificationId
         AND timestamp >= :cutoffTime
         ORDER BY timestamp DESC
     """)
@@ -123,6 +123,12 @@ interface GeminiDao {
     // Prompt Template operations
     @Query("SELECT * FROM prompt_templates WHERE is_active = 1 ORDER BY id ASC LIMIT 1")
     suspend fun getActiveTemplate(): PromptTemplate?
+
+    /**
+     * Non-suspending version of getActiveTemplate for Java interop
+     */
+    @Query("SELECT * FROM prompt_templates WHERE is_active = 1 ORDER BY id ASC LIMIT 1")
+    fun getActiveTemplateBlocking(): PromptTemplate?
 
     @Query("SELECT * FROM prompt_templates ORDER BY created_at DESC")
     fun getAllTemplates(): LiveData<List<PromptTemplate>>

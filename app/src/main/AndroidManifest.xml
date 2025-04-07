@@ -71,6 +71,13 @@
             android:label="Gemini Configuration"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".CustomPromptActivity"
+            android:exported="false"
+            android:label="Custom Prompt"
+            android:theme="@style/Theme.WhatsUit"
+            android:parentActivityName=".MainActivity" />
+
 
         <provider
             android:name="androidx.core.content.FileProvider"

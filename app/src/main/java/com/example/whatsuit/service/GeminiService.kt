@@ -6,6 +6,7 @@ import com.example.whatsuit.data.NotificationEntity
 import androidx.room.withTransaction
 import com.example.whatsuit.data.AppDatabase
 import com.example.whatsuit.data.ConversationHistory
+import com.example.whatsuit.data.ConversationPrompt
 import com.example.whatsuit.data.GeminiConfig
 import com.example.whatsuit.data.PromptTemplate
 import com.example.whatsuit.data.ConversationManager
@@ -27,7 +28,7 @@ class GeminiService(private val context: Context) {
         private const val DEFAULT_HISTORY_LIMIT = 10
         private const val MAX_WORDS = 50 // Limited for concise responses
         private const val MAX_HISTORY_MESSAGES = 5 // Number of recent messages to include
-        
+
         // Rate limiting constants
         private const val MAX_REQUESTS_PER_MINUTE = 15
         private const val RATE_LIMIT_WINDOW_MS = 60000L // 1 minute in milliseconds
@@ -36,25 +37,25 @@ class GeminiService(private val context: Context) {
         private const val MAX_RETRIES_FOR_RATE_LIMIT = 3
     private const val ANALYSIS_PROMPT = """
             Analyze this conversation history and provide insights in the following format:
-            
+
             1. Next Steps:
             - What actions should be taken next with this conversation?
             - What business opportunities exist?
-            
+
             2. Follow-up Actions:
             - Does this require follow-up contact?
             - When and how should we follow up?
-            
+
             3. Negotiation Points:
             - What negotiation strategies would be effective?
             - What key points need to be addressed?
 
             4. Suggested Reply:
             - A short, professional message (max 2 sentences) to move the conversation forward based on the analysis.
-            
+
             Conversation History:
             {context}
-            
+
             Provide a detailed but concise analysis focusing on actionable insights.
         """
     }
@@ -104,11 +105,11 @@ class GeminiService(private val context: Context) {
         if (!notification.conversationId.isNullOrBlank()) {
             return notification.conversationId!!
         }
-        
+
         // Create a new conversation ID based on notification properties
         val newId = "conv-${notification.packageName}-${System.currentTimeMillis()}"
         notification.setConversationId(newId)
-        
+
         // Update the notification in database
         scope.launch(Dispatchers.IO) {
             try {
@@ -118,7 +119,7 @@ class GeminiService(private val context: Context) {
                 Log.e(CONVERSATION_TAG, "Failed to update conversation ID", e)
             }
         }
-        
+
         return newId
     }
 
@@ -176,12 +177,12 @@ class GeminiService(private val context: Context) {
 
         initMutex.withLock {
             if (isInitialized) return@withLock true
-            
+
             try {
                 val config = geminiDao.getConfig()
                 if (config != null && !config.apiKey.isNullOrBlank()) {
                     Log.d(TAG, "Initializing Gemini with model: ${config.modelName}")
-                    
+
                     // Add more robust initialization
                     try {
                         generativeModel = GenerativeModel(
@@ -202,7 +203,7 @@ class GeminiService(private val context: Context) {
             } catch (e: Exception) {
                 Log.e(TAG, "Error retrieving Gemini config", e)
             }
-            
+
             return@withLock false
         }
     }
@@ -213,7 +214,7 @@ class GeminiService(private val context: Context) {
             pendingNotifications.clear()
             pending
         }
-        
+
         for ((notificationId, callback) in notifications) {
             try {
                 generateReply(notificationId, "", callback)
@@ -248,27 +249,27 @@ class GeminiService(private val context: Context) {
     private suspend fun getNotificationWithRetry(notificationId: Long, maxRetries: Int = 3): NotificationEntity? {
         var attempts = 0
         var lastError: Exception? = null
-        
+
         while (attempts < maxRetries) {
             try {
                 val notification = database.withTransaction {
                     database.notificationDao().getNotificationByIdSync(notificationId)
                 }
-                
+
                 if (notification != null) {
                     Log.d(NOTIFICATION_TAG, "Retrieved notification on attempt ${attempts + 1}: $notificationId")
                     return notification
                 } else {
                     Log.w(NOTIFICATION_TAG, "Notification not found on attempt ${attempts + 1}: $notificationId")
                 }
-                
+
                 attempts++
                 if (attempts < maxRetries) {
                     val delayTime = (1000L * (1L shl attempts))
                     Log.d(NOTIFICATION_TAG, "Retrying after $delayTime ms")
                     delay(delayTime.milliseconds)
                 }
-                
+
             } catch (e: Exception) {
                 lastError = e
                 Log.e(NOTIFICATION_TAG, "Error retrieving notification on attempt ${attempts + 1}", e)
@@ -280,7 +281,7 @@ class GeminiService(private val context: Context) {
                 }
             }
         }
-        
+
         val errorMessage = "Failed to retrieve notification after $maxRetries attempts"
         Log.e(NOTIFICATION_TAG, errorMessage, lastError)
         return null
@@ -301,31 +302,31 @@ class GeminiService(private val context: Context) {
             //    return@launch
             //}
 
-            val notification = getNotificationWithRetry(notificationId) 
+            val notification = getNotificationWithRetry(notificationId)
                 ?: throw IllegalStateException("Unable to retrieve notification after retries")
 
             // Get conversation context to check for rapid messages
             var message = initialMessage
             val contextData = conversationManager.getConversationContext(notificationId, notification)
-            
+
             // If there are recent messages in the sequence, wait briefly for more
-            if (contextData.recentMessages.size > 1 && 
+            if (contextData.recentMessages.size > 1 &&
                 System.currentTimeMillis() - contextData.recentMessages.last().timestamp < 1000) {
-                    
+
                 Log.d(TAG, "Detected rapid message sequence, waiting for more messages...")
                 delay(1000) // Wait 1 second for potential follow-up messages
-                
+
                 // Refresh context to get any new messages
                 val updatedContext = conversationManager.getConversationContext(notificationId, notification)
-                
+
                 // Combine all recent messages for context
                 var updatedMessage = updatedContext.recentMessages
                     .joinToString("\n") { it.content }
-                
+
                 message = updatedMessage // Use combined messages as input
                 Log.d(TAG, "Processing combined messages: $updatedMessage")
             }
-            
+
             // Track this notification to prevent duplicate processing
             processedNotifications.add(notificationId)
             scope.launch {
@@ -346,7 +347,7 @@ class GeminiService(private val context: Context) {
             }
             // Special case for API testing
             val isTestMode = notificationId == -1L
-            
+
             // Get or create notification based on test mode
             val testOrRealNotification = if (isTestMode) {
                 // Create fully initialized dummy notification for testing
@@ -370,7 +371,7 @@ class GeminiService(private val context: Context) {
                 getNotificationWithRetry(notificationId)
                     ?: throw IllegalStateException("Unable to retrieve notification after retries")
             }
-            
+
             // Log conversation flow except for test mode
             if (!isTestMode) {
                 logConversationFlow(testOrRealNotification)
@@ -378,25 +379,40 @@ class GeminiService(private val context: Context) {
             } else {
                 Log.d(TAG, "Running in test mode with dummy notification")
             }
-            
+
             ensureInitialized()
             val config = geminiDao.getConfig() ?: throw IllegalStateException("Gemini not configured")
             Log.d(TAG, "Retrieved Gemini config: modelName=${config.modelName}, historyLimit=${config.maxHistoryPerThread}")
             val model = generativeModel ?: throw IllegalStateException("Gemini model not initialized")
 
             Log.d(NOTIFICATION_TAG, "Thread ${Thread.currentThread().id}: Using cached notification")
-            
+
             // Get all historical conversations for this thread
             val existingHistory = database.conversationHistoryDao()
                 .getHistoryForConversationSync(testOrRealNotification.conversationId)
-            
+
             // Get enhanced conversation context including participants and store result
             val currentContextData = conversationManager.getConversationContext(notificationId, testOrRealNotification)
             Log.d(CONVERSATION_TAG, "Retrieved conversation context: threadId=${currentContextData.threadId}, historySize=${currentContextData.historySize}")
 
-            // Get active template or use default
-            val template = database.geminiDao().getActiveTemplate() ?: PromptTemplate.createDefault()
-            
+            // Check for custom prompt for this conversation
+            val conversationId = testOrRealNotification.conversationId
+            val customPrompt = database.conversationPromptDao().getByConversationIdBlocking(conversationId)
+
+            // Use custom prompt if available, otherwise use active template or default
+            val template = if (customPrompt != null) {
+                Log.d(TAG, "Using custom prompt for conversation ID: $conversationId")
+                PromptTemplate(
+                    id = 0,
+                    name = customPrompt.name,
+                    template = customPrompt.promptTemplate,
+                    isActive = true
+                )
+            } else {
+                Log.d(TAG, "No custom prompt found for conversation ID: $conversationId, using default template")
+                database.geminiDao().getActiveTemplate() ?: PromptTemplate.createDefault()
+            }
+
             // Build conversation context string
             val contextString = buildString {
                 // Metadata section
@@ -420,14 +436,14 @@ class GeminiService(private val context: Context) {
                     append("No previous messages\n")
                 }
             }
-            
+
             // Process template with context and current message
             val prompt = PromptTemplate.processTemplate(
                 template = template.template,
                 context = contextString,
                 message = message
             )
-            
+
             // Log detailed generation attempt
             val startTime = System.currentTimeMillis()
             Log.i(TAG, """
@@ -439,12 +455,12 @@ class GeminiService(private val context: Context) {
                 History Size: ${currentContextData.historySize}
                 ================================
             """.trimIndent())
-            
+
             // Generate response
             val response = withContext(Dispatchers.IO) {
                 model.generateContent(prompt)
             }
-            
+
             // Process and limit response to exactly 50 words
             val generatedText = response.text?.let { rawText ->
                 limitWords(rawText, MAX_WORDS)
@@ -484,13 +500,13 @@ class GeminiService(private val context: Context) {
                         response = finalResponse,
                         timestamp = System.currentTimeMillis()
                     )
-                    
+
                     database.runInTransaction {
                         runBlocking {
                             database.conversationHistoryDao().insert(newHistory)
                             Log.d(HISTORY_TAG, "Saved new conversation history entry")
-                 
-          
+
+
                             geminiDao.pruneConversationHistory(
                                 notificationId = notificationId,
                                 keepCount = config.maxHistoryPerThread
@@ -531,13 +547,13 @@ class GeminiService(private val context: Context) {
         conversationContext: ConversationManager.ConversationContext
     ): String {
         if (history.isEmpty()) return "No previous conversation."
-        
+
         return buildString {
             append("Conversation Context:\n")
             append("Thread ID: ${conversationContext.threadId}\n")
             append("History Size: ${conversationContext.historySize}\n")
             append("Last Activity: ${conversationContext.lastActivity}\n\n")
-            
+
             append("Conversation History:\n")
             history.asReversed().forEach { entry ->
                 append("User: ${entry.message}\n")
@@ -565,7 +581,7 @@ class GeminiService(private val context: Context) {
     ) = scope.launch {
         try {
             ensureInitialized()
-            
+
             // Check rate limits before proceeding
             if (!checkRateLimits()) {
                 retryWithBackoff(
@@ -579,23 +595,23 @@ class GeminiService(private val context: Context) {
             }
 
             val model = generativeModel ?: throw IllegalStateException("Gemini model not initialized")
-            
+
             val history = database.getConversationHistoryDao().getHistoryForConversationSync(conversationId)
-            
+
             if (history.isEmpty()) {
                 callback.onComplete("No conversation history to analyze.")
                 return@launch
             }
-            
+
             val context = buildHistoryContext(history)
             val prompt = ANALYSIS_PROMPT.replace("{context}", context)
-            
+
             val response = withContext(Dispatchers.IO) {
                 model.generateContent(prompt)
             }
-            
+
             val analysis = response.text ?: "Unable to generate analysis."
-            
+
             val latestHistoryEntry = history.maxByOrNull { it.timestamp }
             if (latestHistoryEntry != null) {
                 withContext(Dispatchers.IO) {
@@ -608,7 +624,7 @@ class GeminiService(private val context: Context) {
                     }
                 }
             }
-            
+
             withContext(Dispatchers.Main) {
                 callback.onComplete(analysis)
             }
@@ -633,7 +649,7 @@ class GeminiService(private val context: Context) {
 
     private fun buildHistoryContext(history: List<ConversationHistory>): String {
         if (history.isEmpty()) return "No previous conversation."
-        
+
         return buildString {
             history.asReversed().forEach { entry ->
                 append("User: ${entry.message}\n")
@@ -653,16 +669,16 @@ class GeminiService(private val context: Context) {
     private suspend fun checkRateLimits(): Boolean = rateLimitMutex.withLock {
         val currentTime = System.currentTimeMillis()
         val windowStart = currentTime - RATE_LIMIT_WINDOW_MS
-        
+
         // Remove timestamps older than our window
         requestTimestamps.removeAll { it < windowStart }
-        
+
         // Check if we're at the limit
         if (requestTimestamps.size >= MAX_REQUESTS_PER_MINUTE) {
             Log.w(TAG, "Rate limit reached: ${requestTimestamps.size} requests in the last minute")
             return false
         }
-        
+
         // Add current timestamp and allow the request
         requestTimestamps.add(currentTime)
         return true
@@ -674,7 +690,7 @@ class GeminiService(private val context: Context) {
         block: suspend () -> Unit
     ) {
         var currentDelay = initialDelay
-        
+
         repeat(maxRetries) { attempt ->
             try {
                 block()
@@ -683,10 +699,10 @@ class GeminiService(private val context: Context) {
                 if (!isRateLimitError(e) || attempt == maxRetries - 1) {
                     throw e // Rethrow if not a rate limit error or last attempt
                 }
-                
+
                 Log.w(TAG, "Rate limit hit, retrying in ${currentDelay}ms (attempt ${attempt + 1}/$maxRetries)")
                 delay(currentDelay)
-                
+
                 // Exponential backoff with jitter
                 currentDelay = (currentDelay * 2).coerceAtMost(MAX_RETRY_DELAY_MS)
             }

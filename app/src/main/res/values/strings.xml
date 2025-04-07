@@ -5,6 +5,7 @@
     <string name="search_notifications_hint">Search messages and content…</string>
     <string name="no_notifications">No notifications</string>
     <string name="no_notifications_found">No notifications found</string>
+    <string name="no_search_results">No results found for "%1$s"</string>
     <string name="filter_notifications">Filter notifications</string>
     <string name="clear_search">Clear search</string>
     <string name="edit_message_hint">Edit message</string>
@@ -16,4 +17,9 @@
     <string name="save">Save</string>
     <string name="all_apps_count">All Apps (%1$d)</string>
     <string name="app_with_count">%1$s (%2$d)</string>
+
+    <!-- Custom Prompt Activity -->
+    <string name="new_custom_prompt_description">Create a custom prompt for this conversation. This prompt will be used instead of the default prompt when generating replies for this conversation only.</string>
+    <string name="edit_custom_prompt_description">Edit the custom prompt for this conversation. This prompt is currently being used instead of the default prompt when generating replies.</string>
+    <string name="custom_prompt_placeholder_info">The template must include {context} and {message} placeholders.</string>
 </resources>

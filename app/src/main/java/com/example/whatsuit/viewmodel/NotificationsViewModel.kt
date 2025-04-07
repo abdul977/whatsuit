@@ -6,8 +6,11 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.map
 import androidx.lifecycle.switchMap
+import androidx.lifecycle.viewModelScope
 import com.example.whatsuit.data.AppDatabase
 import com.example.whatsuit.data.NotificationEntity
+import com.example.whatsuit.util.SearchUtil
+import kotlinx.coroutines.launch
 import android.util.Log
 
 class NotificationsViewModel(application: Application) : AndroidViewModel(application) {
@@ -19,6 +22,10 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
     
     // Search query filter 
     private val searchQuery = MutableLiveData<String>("")
+
+    // Search results by type
+    private val _searchResults = MutableLiveData<Map<SearchUtil.ResultType, List<SearchUtil.SearchResult>>>()
+    val searchResults: LiveData<Map<SearchUtil.ResultType, List<SearchUtil.SearchResult>>> = _searchResults
     
     // Get notifications filtered by package and search query
     val filteredNotifications: LiveData<List<NotificationEntity>> = 
@@ -49,8 +56,19 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
                 }
             }
         }
+        
+    init {
+        // Initialize SearchUtil with database
+        SearchUtil.initialize(database)
+        
+Log.d("SearchFlow", "[ViewModel] Initialized with database")
 
-    // Get notifications categorized by app name, including package name mapping
+        filteredNotifications.observeForever { notifications ->
+            Log.d("NotificationsViewModel", "Filtered notifications count: ${notifications.size}")
+        }
+    }
+
+    // Get notifications categorized by app name
     val categorizedNotifications: LiveData<Map<String, List<NotificationEntity>>> = 
         filteredNotifications.map { notifications ->
             notifications.groupBy { it.appName ?: "Unknown" }
@@ -72,14 +90,63 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
     fun setSearchQuery(query: String) {
         val trimmedQuery = query.trim()
         if (trimmedQuery != searchQuery.value?.trim('%')) {
+            Log.d("SearchFlow", "[ViewModel] Processing search query: '$trimmedQuery'")
+            performGlobalSearch(trimmedQuery)
+  // Call search first
             searchQuery.value = trimmedQuery
         }
     }
 
-    // Add observer in init block
-    init {
-        filteredNotifications.observeForever { notifications ->
-            Log.d("NotificationsViewModel", "Filtered notifications count: ${notifications.size}")
+    fun isSearching(): Boolean {
+        return !searchQuery.value.isNullOrBlank()
+    }
+
+    fun getCurrentSearchQuery(): String {
+        return searchQuery.value?.trim() ?: ""
+    }
+
+    fun getNotificationById(id: Long): NotificationEntity? {
+        return notificationDao.getNotificationByIdSync(id)
+    }
+
+    /**
+     * Perform a global search across all content types
+     */
+    private fun performGlobalSearch(query: String) {
+        viewModelScope.launch {
+            if (query.isBlank()) {
+                Log.d("SearchFlow", "[ViewModel] Clear search results for empty query")
+                _searchResults.value = emptyMap()
+                return@launch
+            }
+
+            try {
+                val params = SearchUtil.SearchParams(
+                    query = query,
+                    limit = 20
+                )
+                Log.d("SearchFlow", "[ViewModel] Executing search with params: $params")
+                val results = SearchUtil.search(params)
+                Log.d("SearchFlow", "[ViewModel] Got results: ${results.map { "${it.key}: ${it.value.size}" }}")
+                Log.d("SearchFlow", "[ViewModel] Setting search results in LiveData")
+                _searchResults.value = results
+            } catch (e: Exception) {
+                Log.e("NotificationsViewModel", "Error performing global search", e)
+                Log.e("NotificationsViewModel", "Stack trace:", e)
+                _searchResults.value = emptyMap()
+            }
+        }
+    }
+
+    /**
+     * Get search suggestions based on previous searches
+     */
+    suspend fun getSearchSuggestions(prefix: String, limit: Int = 5): List<String> {
+        return try {
+            SearchUtil.getSuggestions(prefix, limit)
+        } catch (e: Exception) {
+            Log.e("NotificationsViewModel", "Error getting search suggestions", e)
+            emptyList()
         }
     }
 }

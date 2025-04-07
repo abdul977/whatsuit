@@ -12,8 +12,11 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.TextView
+import android.widget.Toast
+import android.util.Log
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.example.whatsuit.CustomPromptActivity
 import com.example.whatsuit.MainActivity
 import com.example.whatsuit.NotificationDetailActivity
 import com.example.whatsuit.R
@@ -21,6 +24,7 @@ import com.example.whatsuit.data.NotificationEntity
 import com.example.whatsuit.util.AutoReplyManager
 import com.example.whatsuit.util.NotificationUtils
 import com.example.whatsuit.util.ConversationIdGenerator
+import com.example.whatsuit.util.SearchUtil
 import com.google.android.material.chip.Chip
 
 class HybridNotificationAdapter(
@@ -72,7 +76,7 @@ class HybridNotificationAdapter(
                 holder.bind(item)
                 holder.menuButton.setOnClickListener { v -> showPopupMenu(v, item) }
                 updateAutoReplyStatusAsync(holder, item)
-                
+
                 holder.itemView.setOnClickListener { v ->
                     val intent = Intent(v.context, NotificationDetailActivity::class.java).apply {
                         putExtra("notification_id", item.id)
@@ -98,12 +102,12 @@ class HybridNotificationAdapter(
 
     fun updateNotifications(notifications: Map<String, List<NotificationEntity>>) {
         val newItems = mutableListOf<Any>()
-        
+
         notifications.forEach { (appName, appNotifications) ->
             // Add app header
             val packageName = appNotifications.firstOrNull()?.packageName ?: ""
             newItems.add(AppHeader(appName, packageName, appNotifications.size))
-            
+
             // Add all notifications for this app
             newItems.addAll(appNotifications)
         }
@@ -111,26 +115,145 @@ class HybridNotificationAdapter(
         // Calculate diff and update
         val diffCallback = NotificationDiffCallback(items, newItems)
         val diffResult = DiffUtil.calculateDiff(diffCallback)
-        
+
         items.clear()
         items.addAll(newItems)
         diffResult.dispatchUpdatesTo(this)
+
+        // Log for debugging
+        Log.d("HybridAdapter", "Updated with ${newItems.size} items (${notifications.size} app groups)")
+    }
+
+    /**
+     * Update adapter with search results
+     */
+    fun updateWithSearchResults(searchResults: Map<SearchUtil.ResultType, List<SearchUtil.SearchResult>>) {
+        val newItems = mutableListOf<Any>()
+        val totalResults = searchResults.values.sumOf { it.size }
+
+        Log.d("HybridAdapter", "Updating with $totalResults search results")
+        Log.d("SearchDebug", "Search results received: $searchResults")
+
+        // Process notification results
+        val notificationResults = searchResults[SearchUtil.ResultType.NOTIFICATION] ?: emptyList()
+        if (notificationResults.isNotEmpty()) {
+            // Group notifications by app name
+            val groupedByApp = notificationResults
+                .filterIsInstance<SearchUtil.NotificationResult>()
+                .groupBy { it.appName }
+
+            // Add each app group
+            groupedByApp.forEach { (appName, results) ->
+                // Add app header
+                val packageName = results.firstOrNull()?.packageName ?: ""
+                newItems.add(AppHeader(appName, packageName, results.size))
+
+                // Convert search results to notification entities
+                val notifications = results.map { result ->
+                    NotificationEntity().apply {
+                        setId(result.id)
+                        setPackageName(result.packageName)
+                        setAppName(result.appName)
+                        setTitle(result.title)
+                        setContent(result.content)
+                        setTimestamp(result.timestamp)
+                        setConversationId("search-${result.id}")
+                    }
+                }
+
+                // Add notifications
+                newItems.addAll(notifications)
+            }
+        }
+
+        // Process conversation results if any
+        val conversationResults = searchResults[SearchUtil.ResultType.CONVERSATION] ?: emptyList()
+        if (conversationResults.isNotEmpty()) {
+            // Add conversations header
+            newItems.add(AppHeader("Conversations", "", conversationResults.size))
+
+            // Convert conversation results to notification entities for display
+            val conversationNotifications = conversationResults
+                .filterIsInstance<SearchUtil.ConversationResult>()
+                .map { result ->
+                    NotificationEntity().apply {
+                        setId(result.id)
+                        setPackageName("")  // We don't have this info
+                        setAppName("Conversation")
+                        setTitle(result.title)
+                        setContent(result.content)
+                        setTimestamp(result.timestamp)
+                        setConversationId("search-conv-${result.id}")
+                    }
+                }
+
+            // Add conversation notifications
+            newItems.addAll(conversationNotifications)
+        }
+
+        // Process template results if any
+        val templateResults = searchResults[SearchUtil.ResultType.TEMPLATE] ?: emptyList()
+        if (templateResults.isNotEmpty()) {
+            // Add templates header
+            newItems.add(AppHeader("Templates", "", templateResults.size))
+
+            // Convert template results to notification entities for display
+            val templateNotifications = templateResults
+                .filterIsInstance<SearchUtil.TemplateResult>()
+                .map { result ->
+                    NotificationEntity().apply {
+                        setId(result.id)
+                        setPackageName("")  // We don't have this info
+                        setAppName("Template")
+                        setTitle(result.title)
+                        setContent(result.content)
+                        setTimestamp(result.timestamp)
+                        setConversationId("search-tmpl-${result.id}")
+                    }
+                }
+
+            // Add template notifications
+            newItems.addAll(templateNotifications)
+        }
+
+        // Log details about the items we're adding
+        Log.d("SearchDebug", "New items to be added: ${newItems.size}")
+        newItems.forEachIndexed { index, item ->
+            when (item) {
+                is AppHeader -> Log.d("SearchDebug", "Item $index: AppHeader - ${item.appName} (${item.count})")
+                is NotificationEntity -> Log.d("SearchDebug", "Item $index: Notification - ${item.title}")
+                else -> Log.d("SearchDebug", "Item $index: Unknown type ${item.javaClass.simpleName}")
+            }
+        }
+
+        // Calculate diff and update
+        val diffCallback = NotificationDiffCallback(items, newItems)
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
+
+        // Clear and update items
+        items.clear()
+        items.addAll(newItems)
+        diffResult.dispatchUpdatesTo(this)
+
+        // Log for debugging
+        Log.d("HybridAdapter", "Updated with ${newItems.size} items from search results")
+        Log.d("SearchDebug", "Adapter now has ${itemCount} items")
     }
 
     private fun showPopupMenu(view: View, notification: NotificationEntity) {
         activePopupMenu?.dismiss()
-        
+
         PopupMenu(view.context, view).apply {
             activePopupMenu = this
             MenuInflater(view.context).inflate(R.menu.notification_item_menu, menu)
-            
+
             val autoReplyItem = menu.findItem(R.id.action_toggle_auto_reply)
             autoReplyItem.isEnabled = false
-            
+
             setOnDismissListener { activePopupMenu = null }
-            
+
             val info = extractIdentifierInfo(notification)
-            
+
             autoReplyManager.isAutoReplyDisabled(
                 notification.packageName,
                 info.phoneNumber,
@@ -146,6 +269,21 @@ class HybridNotificationAdapter(
                 when (item.itemId) {
                     R.id.action_toggle_auto_reply -> {
                         toggleAutoReply(notification)
+                        true
+                    }
+                    R.id.action_set_custom_prompt -> {
+                        try {
+                            Log.d("CustomPrompt", "Clicked on Set Custom Prompt for conversation ID: ${notification.conversationId}")
+                            val intent = Intent(view.context, CustomPromptActivity::class.java).apply {
+                                putExtra("conversation_id", notification.conversationId)
+                                putExtra("conversation_title", notification.title)
+                            }
+                            view.context.startActivity(intent)
+                            Log.d("CustomPrompt", "Started CustomPromptActivity")
+                        } catch (e: Exception) {
+                            Log.e("CustomPrompt", "Error starting CustomPromptActivity", e)
+                            Toast.makeText(view.context, "Error opening custom prompt: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
                         true
                     }
                     R.id.action_view_details -> {
@@ -190,7 +328,7 @@ class HybridNotificationAdapter(
         }
 
         val info = extractIdentifierInfo(notification)
-        
+
         autoReplyManager.isAutoReplyDisabled(
             notification.packageName,
             info.phoneNumber,
@@ -218,8 +356,8 @@ class HybridNotificationAdapter(
     private fun extractIdentifierInfo(notification: NotificationEntity): IdentifierInfo {
         var phoneNumber = ""
         var titlePrefix = ""
-        
-        if (notification.packageName.contains("whatsapp") && 
+
+        if (notification.packageName.contains("whatsapp") &&
             notification.title?.matches(Regex(".*[0-9+].*")) == true) {
             try {
                 phoneNumber = NotificationUtils.normalizePhoneNumber(notification.title!!)
@@ -231,10 +369,10 @@ class HybridNotificationAdapter(
             titlePrefix = NotificationUtils.getTitlePrefix(notification.title ?: ""
 )
         }
-        
+
         return IdentifierInfo(phoneNumber, titlePrefix)
     }
-    
+
     fun cleanup() {
         activePopupMenu?.dismiss()
         activePopupMenu = null
@@ -278,11 +416,11 @@ class HybridNotificationAdapter(
         private val oldItems: List<Any>,
         private val newItems: List<Any>
     ) : DiffUtil.Callback() {
-        
+
         override fun getOldListSize(): Int = oldItems.size
-        
+
         override fun getNewListSize(): Int = newItems.size
-        
+
         override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
             val oldItem = oldItems[oldItemPosition]
             val newItem = newItems[newItemPosition]
@@ -297,7 +435,7 @@ class HybridNotificationAdapter(
                 else -> false
             }
         }
-        
+
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
             val oldItem = oldItems[oldItemPosition]
             val newItem = newItems[newItemPosition]

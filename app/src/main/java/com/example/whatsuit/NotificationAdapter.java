@@ -16,6 +16,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -59,14 +60,14 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
     @Override
     public void onBindViewHolder(@NonNull NotificationViewHolder holder, int position) {
         NotificationEntity notification = notifications.get(position);
-            
+
         // Apply material transitions
         holder.itemView.setTransitionName("notification_" + notification.getId());
-        
+
         // Bind notification data
         holder.notificationTitle.setText(notification.getTitle());
         holder.notificationContent.setText(notification.getContent());
-        
+
         CharSequence timeAgo = DateUtils.getRelativeTimeSpanString(
             notification.getTimestamp(),
             System.currentTimeMillis(),
@@ -78,7 +79,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(v.getContext(), NotificationDetailActivity.class);
             intent.putExtra("notification_id", notification.getId());
-            
+
             // Start activity with shared element transition
             v.getContext().startActivity(intent);
         });
@@ -134,7 +135,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return oldItems.get(oldItemPosition).getId() == 
+                return oldItems.get(oldItemPosition).getId() ==
                     newItems.get(newItemPosition).getId();
             }
 
@@ -153,20 +154,20 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         if (activePopupMenu != null) {
             activePopupMenu.dismiss();
         }
-        
+
         PopupMenu popup = new PopupMenu(view.getContext(), view);
         activePopupMenu = popup;
-        
+
         MenuInflater inflater = popup.getMenuInflater();
         inflater.inflate(R.menu.notification_item_menu, popup.getMenu());
-        
+
         MenuItem autoReplyItem = popup.getMenu().findItem(R.id.action_toggle_auto_reply);
         autoReplyItem.setEnabled(false);
-        
+
         popup.setOnDismissListener(menu -> activePopupMenu = null);
-        
+
         ExtractedInfo info = extractIdentifierInfo(notification);
-        
+
         autoReplyManager.isAutoReplyDisabled(
             notification.getPackageName(),
             info.phoneNumber,
@@ -180,6 +181,19 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_toggle_auto_reply) {
                 toggleAutoReply(notification);
+                return true;
+            } else if (item.getItemId() == R.id.action_set_custom_prompt) {
+                try {
+                    Log.d("CustomPrompt", "Clicked on Set Custom Prompt for conversation ID: " + notification.getConversationId());
+                    Intent intent = new Intent(view.getContext(), CustomPromptActivity.class);
+                    intent.putExtra("conversation_id", notification.getConversationId());
+                    intent.putExtra("conversation_title", notification.getTitle());
+                    view.getContext().startActivity(intent);
+                    Log.d("CustomPrompt", "Started CustomPromptActivity");
+                } catch (Exception e) {
+                    Log.e("CustomPrompt", "Error starting CustomPromptActivity", e);
+                    Toast.makeText(view.getContext(), "Error opening custom prompt: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
                 return true;
             } else if (item.getItemId() == R.id.action_view_details) {
                 Intent intent = new Intent(view.getContext(), NotificationDetailActivity.class);
@@ -204,7 +218,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         // Log both the stored and generated IDs to verify if they match
         String conversationId = notification.getConversationId();
         String generatedId = ConversationIdGenerator.generate(notification);
-        
+
         Log.d(TAG, "Toggling auto-reply:" +
             "\nStored ID: " + conversationId +
             "\nGenerated ID: " + generatedId +
@@ -224,7 +238,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         holder.autoReplyStatusChip.setVisibility(View.VISIBLE);
 
         ExtractedInfo info = extractIdentifierInfo(notification);
-        
+
         autoReplyManager.isAutoReplyDisabled(
             notification.getPackageName(),
             info.phoneNumber,
@@ -247,9 +261,9 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
     private ExtractedInfo extractIdentifierInfo(NotificationEntity notification) {
         String phoneNumber = "";
         String titlePrefix = "";
-        
-        if (notification.getPackageName().contains("whatsapp") && 
-            notification.getTitle() != null && 
+
+        if (notification.getPackageName().contains("whatsapp") &&
+            notification.getTitle() != null &&
             notification.getTitle().matches(".*[0-9+].*")) {
             try {
                 phoneNumber = NotificationUtils.normalizePhoneNumber(notification.getTitle());
@@ -259,7 +273,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         } else {
             titlePrefix = NotificationUtils.getTitlePrefix(notification.getTitle());
         }
-        
+
         return new ExtractedInfo(phoneNumber, titlePrefix);
     }
 
