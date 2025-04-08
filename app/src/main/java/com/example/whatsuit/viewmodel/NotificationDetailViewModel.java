@@ -72,7 +72,7 @@ public class NotificationDetailViewModel extends AndroidViewModel {
     public void addConversation(ConversationHistory newConversation) {
         executor.execute(() -> {
             try {
-                database.getConversationHistoryDao().insert(newConversation);
+                database.getConversationHistoryDao().insertSync(newConversation);
                 loadConversations(newConversation.getNotificationId());
             } catch (Exception e) {
                 e.printStackTrace();

@@ -16,6 +16,12 @@ interface ConversationHistoryDao {
     @Insert
     suspend fun insert(history: ConversationHistory)
     
+    /**
+     * Non-suspending version of insert for Java interop
+     */
+    @Insert
+    fun insertSync(history: ConversationHistory)
+    
     @Update
     suspend fun update(history: ConversationHistory)
     
