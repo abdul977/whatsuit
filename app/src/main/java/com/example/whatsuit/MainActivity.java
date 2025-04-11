@@ -12,6 +12,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -47,6 +48,8 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import com.example.whatsuit.util.PermissionManager;
 
 import com.example.whatsuit.data.AppDatabase;
 import com.example.whatsuit.data.AppInfo;
@@ -118,9 +121,12 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Install splash screen and keep it visible during initialization
-        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
-        splashScreen.setKeepOnScreenCondition(() -> !isSplashComplete);
+        // Handle splash screen differently based on Android version
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ (API 31+) - Use the new SplashScreen API
+            SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+            splashScreen.setKeepOnScreenCondition(() -> !isSplashComplete);
+        }
 
         super.onCreate(savedInstanceState);
 
@@ -270,8 +276,11 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
     }
 
     private void switchToMainContent() {
-        // Enable edge-to-edge and set main layout
-        EdgeToEdge.enable(this);
+        // Enable edge-to-edge on Android 10+ (API 29+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            EdgeToEdge.enable(this);
+        }
+
         setContentView(R.layout.activity_main);
 
         // Initialize views from regular layout
@@ -358,10 +367,38 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         // Set up empty view
         emptyView = findViewById(R.id.emptyView);
 
-        // Check for notification access permission
-        if (!isNotificationServiceEnabled()) {
-            showNotificationAccessDialog();
-        }
+        // Check for required permissions
+        checkRequiredPermissions();
+    }
+
+    /**
+     * Check all required permissions based on Android version
+     */
+    private void checkRequiredPermissions() {
+        // First check storage permissions
+        PermissionManager.checkStoragePermissions(this, storageGranted -> {
+            if (storageGranted) {
+                Log.d("MainActivity", "Storage permissions granted");
+            } else {
+                Log.w("MainActivity", "Storage permissions denied");
+                // Continue anyway as it's not critical
+            }
+
+            // Then check notification permission (Android 13+)
+            PermissionManager.checkNotificationPermission(this, notificationGranted -> {
+                if (notificationGranted) {
+                    Log.d("MainActivity", "Notification permission granted");
+                } else {
+                    Log.w("MainActivity", "Notification permission denied");
+                    // Continue anyway as we'll check notification listener service
+                }
+
+                // Finally check notification listener service
+                if (!isNotificationServiceEnabled()) {
+                    showNotificationAccessDialog();
+                }
+            });
+        });
     }
 
     public void showConversationHistory(NotificationEntity notification) {

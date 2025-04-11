@@ -53,7 +53,7 @@ public class NotificationService extends NotificationListenerService {
         executorService = Executors.newSingleThreadExecutor();
         geminiService = new GeminiService(this);
         prefs = getSharedPreferences("whatsuit_settings", MODE_PRIVATE);
-        
+
         executorService.execute(() -> {
             try {
                 geminiService.initializeFromJava();
@@ -62,7 +62,7 @@ public class NotificationService extends NotificationListenerService {
                 Log.e(TAG, "Error initializing GeminiService", e);
             }
         });
-        
+
         Log.d(TAG, "NotificationService created");
     }
 
@@ -71,28 +71,28 @@ public class NotificationService extends NotificationListenerService {
         try {
             Notification notification = sbn.getNotification();
             Bundle extras = notification.extras;
-            
+
             String title = extras.getString(Notification.EXTRA_TITLE, "");
             String text = extras.getString(Notification.EXTRA_TEXT, "");
-            
+
             if (SentMessageTracker.getInstance().isLikelyOwnMessage(text)) {
                 Log.d(TAG, "Skipping processing of our own message: " + text);
                 return;
             }
-            
+
             String packageName = sbn.getPackageName();
-            
+
             PackageManager packageManager = getPackageManager();
             ApplicationInfo applicationInfo = packageManager.getApplicationInfo(packageName, 0);
             String appName = packageManager.getApplicationLabel(applicationInfo).toString();
-            
+
             NotificationEntity entity = new NotificationEntity();
             entity.setTitle(title);
             entity.setContent(text);
             entity.setPackageName(packageName);
             entity.setAppName(appName);
             entity.setTimestamp(sbn.getPostTime());
-            
+
             String conversationId = ConversationIdGenerator.generate(entity);
             entity.setConversationId(conversationId);
 
@@ -109,11 +109,11 @@ public class NotificationService extends NotificationListenerService {
                 try {
                     long notificationId = database.notificationDao().upsertNotification(entity);
                     entity.setId(notificationId);
-                    
+
                     if (shouldAutoReply(packageName)) {
                         handleAutoReply(sbn, entity, notification);
                     }
-                    
+
                     Log.d(TAG, "Notification processed: " + title);
                 } catch (Exception e) {
                     Log.e(TAG, "Error processing notification", e);
@@ -147,32 +147,33 @@ public class NotificationService extends NotificationListenerService {
 
             String phoneNumber = "";
             String titlePrefix = "";
-            
-            if (NotificationUtils.isWhatsAppPackage(entity.getPackageName()) && 
+
+            if (NotificationUtils.isWhatsAppPackage(entity.getPackageName()) &&
                 NotificationUtils.hasPhoneNumber(entity.getTitle())) {
                 phoneNumber = NotificationUtils.normalizePhoneNumber(entity.getTitle());
             } else {
                 titlePrefix = NotificationUtils.getTitlePrefix(entity.getTitle());
             }
-            
+
             AutoReplySettings settings = database.autoReplySettingsDao().getByConversationIdBlocking(entity.getConversationId());
             if (settings != null && settings.isDisabled()) {
                 Log.d(TAG, "Auto-reply is disabled for this conversation, skipping reply");
                 return;
             }
-            
+
             String conversationId = entity.getConversationId();
-            
+
             if (recentlyProcessedConversations.contains(conversationId)) {
                 Log.d(TAG, "Conversation ID " + conversationId + " was just processed, skipping to prevent duplicate replies");
                 return;
             }
-            
+
             recentlyProcessedConversations.add(conversationId);
 
             int throttleDelay = prefs.getInt(PREF_THROTTLE_DELAY, DEFAULT_THROTTLE_DELAY_MS);
             handler.postDelayed(() -> recentlyProcessedConversations.remove(conversationId), throttleDelay);
 
+            // Handle notification actions differently based on Android version
             Action[] actions = notification.actions;
             if (actions == null) {
                 Log.d(TAG, "No actions found for auto-reply");
@@ -182,13 +183,21 @@ public class NotificationService extends NotificationListenerService {
             Action replyAction = null;
             RemoteInput remoteInput = null;
 
-            for (Action action : actions) {
-                RemoteInput[] remoteInputs = action.getRemoteInputs();
-                if (remoteInputs != null && remoteInputs.length > 0) {
-                    replyAction = action;
-                    remoteInput = remoteInputs[0];
-                    break;
+            // For Android 7+ (API 24+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                for (Action action : actions) {
+                    RemoteInput[] remoteInputs = action.getRemoteInputs();
+                    if (remoteInputs != null && remoteInputs.length > 0) {
+                        replyAction = action;
+                        remoteInput = remoteInputs[0];
+                        break;
+                    }
                 }
+            } else {
+                // For Android 6 (API 23) - not needed for our minSdk 24, but kept for future reference
+                Log.d(TAG, "Running on Android 6 or lower, direct reply not supported");
+                // Could implement a fallback mechanism here if needed
+                return;
             }
 
             if (replyAction == null || remoteInput == null) {
@@ -211,7 +220,7 @@ public class NotificationService extends NotificationListenerService {
 
                         Intent intent = new Intent();
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        
+
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                             RemoteInput.addResultsToIntent(new RemoteInput[]{finalRemoteInput}, intent, resultsBundle);
                         } else {
@@ -219,7 +228,7 @@ public class NotificationService extends NotificationListenerService {
                             wrapper.putBundle(RemoteInput.RESULTS_CLIP_LABEL, resultsBundle);
                             intent.putExtra(RemoteInput.EXTRA_RESULTS_DATA, wrapper);
                         }
-                        
+
                         finalReplyAction.actionIntent.send(NotificationService.this, 0, intent);
                         SentMessageTracker.getInstance().recordSentMessage(response);
 
