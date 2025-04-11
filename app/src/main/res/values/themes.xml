@@ -35,12 +35,11 @@
         <!-- Status bar and navigation -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">true</item>
 
         <!-- Edge-to-edge support -->
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
 
         <!-- Chat-specific styles -->
         <item name="android:textViewStyle">@style/ChatTextViewStyle</item>

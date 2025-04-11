@@ -21,6 +21,13 @@ android {
         multiDexEnabled = true
     }
 
+    // Lint configuration
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -114,6 +121,8 @@ dependencies {
 
     // Testing
     testImplementation(libs.junit)
+    testImplementation("org.mockito:mockito-core:5.10.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
 }

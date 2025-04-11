@@ -39,7 +39,7 @@ class PromptTemplateTest {
     @Test
     fun `processTemplate handles empty context`() {
         val templateText = "Context: {context}\nMessage: {message}"
-        
+
         val processed = PromptTemplate.processTemplate(
             template = templateText,
             context = "",
@@ -53,8 +53,8 @@ class PromptTemplateTest {
     fun `processTemplate handles special characters in input`() {
         val templateText = "Context: {context}\nMessage: {message}"
         val message = "Hello! How are you? 👋"
-        val context = "Previous message with $pecial ch@racters"
-        
+        val context = "Previous message with special ch@racters"
+
         val processed = PromptTemplate.processTemplate(
             template = templateText,
             context = context,
@@ -62,7 +62,7 @@ class PromptTemplateTest {
         )
 
         assertEquals(
-            "Context: Previous message with $pecial ch@racters\nMessage: Hello! How are you? 👋",
+            "Context: Previous message with special ch@racters\nMessage: Hello! How are you? 👋",
             processed
         )
     }
@@ -85,7 +85,7 @@ class PromptTemplateTest {
 
         // Verify line count is maintained
         assertEquals(7, processed.lines().size)
-        
+
         // Verify indentation is preserved
         assertTrue(processed.contains("    context"))
         assertTrue(processed.contains("    message text"))

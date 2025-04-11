@@ -10,16 +10,19 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
-import org.mockito.Mockito.*
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.any
+import org.mockito.Mockito.eq
 import org.mockito.MockitoAnnotations
 
 class GeminiServiceTest {
     @Mock
     private lateinit var context: Context
-    
+
     @Mock
     private lateinit var database: AppDatabase
-    
+
     @Mock
     private lateinit var geminiDao: GeminiDao
 
@@ -44,7 +47,7 @@ class GeminiServiceTest {
         `when`(geminiDao.getConfig()).thenReturn(config)
 
         geminiService.initialize()
-        
+
         verify(geminiDao).getConfig()
     }
 
@@ -59,7 +62,7 @@ class GeminiServiceTest {
             name = "Test Template",
             template = "Test {message} with {context}"
         )
-        
+
         `when`(geminiDao.getConfig()).thenReturn(config)
         `when`(geminiDao.getActiveTemplate()).thenReturn(template)
         `when`(geminiDao.getConversationHistory(any(), any())).thenReturn(emptyList())
@@ -95,7 +98,7 @@ class GeminiServiceTest {
             maxHistoryPerThread = 10
         )
         val template = PromptTemplate.createDefault()
-        
+
         `when`(geminiDao.getConfig()).thenReturn(config)
         `when`(geminiDao.getActiveTemplate()).thenReturn(template)
         `when`(geminiDao.getConversationHistory(any(), any())).thenReturn(emptyList())
