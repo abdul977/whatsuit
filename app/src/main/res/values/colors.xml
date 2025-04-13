@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#6750A4</color>
+    <color name="primary">#1976D2</color>
     <!-- Material Design 3 system colors -->
-    <color name="seed">#6750A4</color>
-    <color name="md_theme_primary">#6750A4</color>
+    <color name="seed">#1976D2</color>
+    <color name="md_theme_primary">#1976D2</color>
     <color name="md_theme_onPrimary">#FFFFFF</color>
-    <color name="md_theme_primaryContainer">#EADDFF</color>
-    <color name="md_theme_onPrimaryContainer">#21005E</color>
-    <color name="md_theme_secondary">#7F67BE</color>
+    <color name="md_theme_primaryContainer">#D1E4FF</color>
+    <color name="md_theme_onPrimaryContainer">#001D36</color>
+    <color name="md_theme_secondary">#0277BD</color>
     <color name="md_theme_onSecondary">#FFFFFF</color>
-    <color name="md_theme_secondaryContainer">#E8DEF8</color>
-    <color name="md_theme_onSecondaryContainer">#1D1B20</color>
-    <color name="md_theme_surface">#FDF7FF</color>
-    <color name="md_theme_onSurface">#1D1B20</color>
+    <color name="md_theme_secondaryContainer">#D0EFFF</color>
+    <color name="md_theme_onSecondaryContainer">#001E2F</color>
+    <color name="md_theme_surface">#FAFDFD</color>
+    <color name="md_theme_onSurface">#191C1D</color>
     <color name="md_theme_error">#B3261E</color>
     <color name="md_theme_onError">#FFFFFF</color>
     <color name="md_theme_errorContainer">#F9DEDC</color>
     <color name="md_theme_onErrorContainer">#410E0B</color>
-    <color name="md_theme_surfaceVariant">#E7E0EC</color>
-    <color name="md_theme_onSurfaceVariant">#49454F</color>
-    <color name="md_theme_outline">#79747E</color>
-    <color name="md_theme_background">#FFFBFF</color>
-    <color name="md_theme_onBackground">#1D1B20</color>
+    <color name="md_theme_surfaceVariant">#DCE4E9</color>
+    <color name="md_theme_onSurfaceVariant">#40484C</color>
+    <color name="md_theme_outline">#70787D</color>
+    <color name="md_theme_background">#FAFDFD</color>
+    <color name="md_theme_onBackground">#191C1D</color>
 
     <!-- Legacy colors -->
     <color name="black">#FF000000</color>

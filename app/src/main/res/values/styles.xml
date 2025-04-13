@@ -14,4 +14,22 @@
         <item name="closeIcon">@drawable/ic_close</item>
         <item name="searchIcon">@drawable/ic_search</item>
     </style>
+
+    <!-- Chip styles -->
+    <style name="ThemeOverlay.Material3.Chip.Assist" parent="ThemeOverlay.Material3.AutoCompleteTextView">
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnSurface">@color/md_theme_onSurface</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+    </style>
+
+    <style name="Widget.Material3.Chip.Assist" parent="Widget.Material3.Chip.Suggestion">
+        <item name="android:textAppearance">@style/TextAppearance.Material3.BodySmall</item>
+        <item name="android:textColor">@color/md_theme_onSurface</item>
+        <item name="chipBackgroundColor">@color/md_theme_surfaceVariant</item>
+        <item name="chipStrokeColor">@color/md_theme_outline</item>
+        <item name="chipStrokeWidth">0dp</item>
+        <item name="chipMinHeight">32dp</item>
+        <item name="chipMinTouchTargetSize">32dp</item>
+        <item name="closeIconVisible">false</item>
+    </style>
 </resources>
