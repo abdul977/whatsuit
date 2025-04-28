@@ -12,6 +12,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -471,7 +472,8 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
         searchView.setMaxWidth(Integer.MAX_VALUE);
         searchView.setIconifiedByDefault(true);
         searchView.setQueryRefinementEnabled(true);
-        searchView.setBackground(getDrawable(R.drawable.search_filter_background));
+        // Remove background to blend with toolbar
+        searchView.setBackgroundColor(Color.TRANSPARENT);
         searchView.setContentDescription(getString(R.string.search_notifications));
 
         // Style the search text and icon colors
@@ -500,11 +502,17 @@ public class MainActivity extends AppCompatActivity implements AutoReplyProvider
             });
         }
 
-        // Remove the underline and add elevation
+        // Remove the underline and make background transparent
         View searchPlate = searchView.findViewById(androidx.appcompat.R.id.search_plate);
         if (searchPlate != null) {
-            searchPlate.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-            searchPlate.setElevation(4f);
+            searchPlate.setBackgroundColor(Color.TRANSPARENT);
+            searchPlate.setElevation(0f); // Remove elevation for a flat look
+        }
+
+        // Also make the submit area transparent
+        View submitArea = searchView.findViewById(androidx.appcompat.R.id.submit_area);
+        if (submitArea != null) {
+            submitArea.setBackgroundColor(Color.TRANSPARENT);
         }
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {

@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#1976D2</color>
+    <color name="primary">#424242</color>
     <!-- Material Design 3 system colors -->
-    <color name="seed">#1976D2</color>
-    <color name="md_theme_primary">#1976D2</color>
+    <color name="seed">#424242</color>
+    <color name="md_theme_primary">#424242</color>
     <color name="md_theme_onPrimary">#FFFFFF</color>
-    <color name="md_theme_primaryContainer">#D1E4FF</color>
-    <color name="md_theme_onPrimaryContainer">#001D36</color>
-    <color name="md_theme_secondary">#0277BD</color>
+    <color name="md_theme_primaryContainer">#E0E0E0</color>
+    <color name="md_theme_onPrimaryContainer">#212121</color>
+    <color name="md_theme_secondary">#616161</color>
     <color name="md_theme_onSecondary">#FFFFFF</color>
-    <color name="md_theme_secondaryContainer">#D0EFFF</color>
-    <color name="md_theme_onSecondaryContainer">#001E2F</color>
-    <color name="md_theme_surface">#FAFDFD</color>
-    <color name="md_theme_onSurface">#191C1D</color>
-    <color name="md_theme_error">#B3261E</color>
+    <color name="md_theme_secondaryContainer">#EEEEEE</color>
+    <color name="md_theme_onSecondaryContainer">#212121</color>
+    <color name="md_theme_surface">#FFFFFF</color>
+    <color name="md_theme_onSurface">#212121</color>
+    <color name="md_theme_error">#B00020</color>
     <color name="md_theme_onError">#FFFFFF</color>
-    <color name="md_theme_errorContainer">#F9DEDC</color>
-    <color name="md_theme_onErrorContainer">#410E0B</color>
-    <color name="md_theme_surfaceVariant">#DCE4E9</color>
-    <color name="md_theme_onSurfaceVariant">#40484C</color>
-    <color name="md_theme_outline">#70787D</color>
-    <color name="md_theme_background">#FAFDFD</color>
-    <color name="md_theme_onBackground">#191C1D</color>
+    <color name="md_theme_errorContainer">#FFCDD2</color>
+    <color name="md_theme_onErrorContainer">#B71C1C</color>
+    <color name="md_theme_surfaceVariant">#F5F5F5</color>
+    <color name="md_theme_onSurfaceVariant">#757575</color>
+    <color name="md_theme_outline">#9E9E9E</color>
+    <color name="md_theme_background">#FFFFFF</color>
+    <color name="md_theme_onBackground">#212121</color>
 
     <!-- Legacy colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
     <!-- Colors for older Android versions (API 24+) -->
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <color name="purple_200">#757575</color>
+    <color name="purple_500">#616161</color>
+    <color name="purple_700">#424242</color>
+    <color name="teal_200">#BDBDBD</color>
+    <color name="teal_700">#757575</color>
 </resources>

@@ -9,13 +9,16 @@ import com.example.whatsuit.service.GeminiService
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.any
 import org.mockito.Mockito.eq
+import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.MockitoAnnotations
 
+@RunWith(MockitoJUnitRunner::class)
 class GeminiServiceTest {
     @Mock
     private lateinit var context: Context

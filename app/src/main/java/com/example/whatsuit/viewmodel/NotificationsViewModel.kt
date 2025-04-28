@@ -16,36 +16,36 @@ import android.util.Log
 class NotificationsViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application.applicationContext)
     private val notificationDao = database.notificationDao()
-    
+
     // Selected package name filter
     private val selectedPackage = MutableLiveData<String?>(null)
-    
-    // Search query filter 
+
+    // Search query filter
     private val searchQuery = MutableLiveData<String>("")
 
     // Search results by type
     private val _searchResults = MutableLiveData<Map<SearchUtil.ResultType, List<SearchUtil.SearchResult>>>()
     val searchResults: LiveData<Map<SearchUtil.ResultType, List<SearchUtil.SearchResult>>> = _searchResults
-    
+
     // Get notifications filtered by package and search query
-    val filteredNotifications: LiveData<List<NotificationEntity>> = 
+    val filteredNotifications: LiveData<List<NotificationEntity>> =
         selectedPackage.switchMap { packageName ->
             searchQuery.switchMap { query ->
                 when {
                     // No filters - show all
-                    packageName == null && query.isEmpty() -> 
+                    packageName == null && query.isEmpty() ->
                         notificationDao.getSmartGroupedNotifications()
-                    
+
                     // Only package filter
-                    query.isEmpty() -> 
+                    query.isEmpty() ->
                         notificationDao.getNotificationsForApp(packageName)
-                    
+
                     // Only search filter
                     packageName == null -> {
                         val searchTerm = if (!query.startsWith("%")) "%$query%" else query
                         notificationDao.searchNotifications(searchTerm)
                     }
-                    
+
                     // Both filters
                     else -> {
                         val searchTerm = if (!query.startsWith("%")) "%$query%" else query
@@ -56,11 +56,11 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
                 }
             }
         }
-        
+
     init {
         // Initialize SearchUtil with database
         SearchUtil.initialize(database)
-        
+
 Log.d("SearchFlow", "[ViewModel] Initialized with database")
 
         filteredNotifications.observeForever { notifications ->
@@ -69,31 +69,34 @@ Log.d("SearchFlow", "[ViewModel] Initialized with database")
     }
 
     // Get notifications categorized by app name
-    val categorizedNotifications: LiveData<Map<String, List<NotificationEntity>>> = 
+    val categorizedNotifications: LiveData<Map<String, List<NotificationEntity>>> =
         filteredNotifications.map { notifications ->
             notifications.groupBy { it.appName ?: "Unknown" }
                        .toSortedMap()
         }
-        
+
     // Get total notification count
     val totalNotificationCount: LiveData<Int> = filteredNotifications.map { it.size }
-    
+
     // Get notification count per app
     val notificationCountPerApp: LiveData<Map<String, Int>> = categorizedNotifications.map { grouped ->
         grouped.mapValues { it.value.size }
     }
-    
+
     fun setSelectedApp(packageName: String?) {
         selectedPackage.value = packageName
     }
-    
+
     fun setSearchQuery(query: String) {
         val trimmedQuery = query.trim()
         if (trimmedQuery != searchQuery.value?.trim('%')) {
             Log.d("SearchFlow", "[ViewModel] Processing search query: '$trimmedQuery'")
-            performGlobalSearch(trimmedQuery)
-  // Call search first
-            searchQuery.value = trimmedQuery
+            // Call search first with a slight delay to ensure UI responsiveness
+            viewModelScope.launch {
+                performGlobalSearch(trimmedQuery)
+                // Update the search query value after search is performed
+                searchQuery.postValue(trimmedQuery)
+            }
         }
     }
 
@@ -112,29 +115,46 @@ Log.d("SearchFlow", "[ViewModel] Initialized with database")
     /**
      * Perform a global search across all content types
      */
-    private fun performGlobalSearch(query: String) {
-        viewModelScope.launch {
+    private suspend fun performGlobalSearch(query: String) {
+        try {
             if (query.isBlank()) {
                 Log.d("SearchFlow", "[ViewModel] Clear search results for empty query")
-                _searchResults.value = emptyMap()
-                return@launch
+                _searchResults.postValue(emptyMap())
+                return
             }
+
+            Log.d("SearchFlow", "[ViewModel] Starting search for query: '$query'")
 
             try {
                 val params = SearchUtil.SearchParams(
                     query = query,
-                    limit = 20
+                    limit = 30  // Increased limit for better results
                 )
                 Log.d("SearchFlow", "[ViewModel] Executing search with params: $params")
+
+                // Execute the search
                 val results = SearchUtil.search(params)
-                Log.d("SearchFlow", "[ViewModel] Got results: ${results.map { "${it.key}: ${it.value.size}" }}")
-                Log.d("SearchFlow", "[ViewModel] Setting search results in LiveData")
-                _searchResults.value = results
+
+                // Log detailed results for debugging
+                Log.d("SearchFlow", "[ViewModel] Search complete, got ${results.values.sumOf { it.size }} total results")
+                results.forEach { (type, typeResults) ->
+                    Log.d("SearchFlow", "[ViewModel] Results for $type: ${typeResults.size}")
+                    if (typeResults.isNotEmpty()) {
+                        Log.d("SearchFlow", "[ViewModel] First result: ${typeResults.first().title}")
+                    }
+                }
+
+                // Post results to LiveData
+                Log.d("SearchFlow", "[ViewModel] Posting search results to LiveData")
+                _searchResults.postValue(results)
             } catch (e: Exception) {
-                Log.e("NotificationsViewModel", "Error performing global search", e)
-                Log.e("NotificationsViewModel", "Stack trace:", e)
-                _searchResults.value = emptyMap()
+                Log.e("SearchFlow", "Error performing global search for query: '$query'", e)
+                Log.e("SearchFlow", "Stack trace:", e)
+                _searchResults.postValue(emptyMap())
             }
+        } catch (e: Exception) {
+            Log.e("SearchFlow", "Unexpected error in performGlobalSearch", e)
+            _searchResults.postValue(emptyMap())
         }
     }
 

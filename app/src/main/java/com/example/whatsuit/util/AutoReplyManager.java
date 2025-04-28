@@ -45,7 +45,14 @@ public class AutoReplyManager {
         if (context != null) {
             this.applicationContext = context.getApplicationContext();
         }
-        this.executor = Executors.newSingleThreadExecutor();
+
+        try {
+            this.executor = Executors.newSingleThreadExecutor();
+            Log.d(TAG, "Created executor service in constructor");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create executor service in constructor", e);
+            // We'll create it on-demand when needed
+        }
     }
 
     public void setCurrentNotification(NotificationEntity notification) {
@@ -138,10 +145,23 @@ public class AutoReplyManager {
     }
 
     public void toggleAutoReply(String packageName, String phoneNumber, String titlePrefix, String conversationId, AutoReplyCallback callback) {
-        // Check if executor is null and recreate if necessary
-        if (executor == null) {
-            Log.w(TAG, "Executor was null in toggleAutoReply, recreating it");
-            executor = Executors.newSingleThreadExecutor();
+        Log.d(TAG, "toggleAutoReply called with:" +
+                  "\nPackage: " + packageName +
+                  "\nPhone: " + phoneNumber +
+                  "\nTitle Prefix: " + titlePrefix +
+                  "\nConversation ID: " + conversationId);
+
+        // Synchronize to prevent race conditions when checking/recreating executor
+        synchronized (AutoReplyManager.class) {
+            // Check if executor is null and recreate if necessary
+            if (executor == null) {
+                Log.w(TAG, "Executor was null in toggleAutoReply, recreating it");
+                try {
+                    executor = Executors.newSingleThreadExecutor();
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to create executor in toggleAutoReply", e);
+                }
+            }
         }
 
         // Use final reference to avoid potential race conditions
@@ -156,56 +176,85 @@ public class AutoReplyManager {
             return;
         }
 
-        currentExecutor.execute(() -> {
-            if (conversationId == null) {
-                Log.e(TAG, "Cannot toggle auto-reply: conversation ID is null");
-                if (callback != null) {
-                    callback.onStatusChanged(false);
+        try {
+            currentExecutor.execute(() -> {
+                try {
+                    if (conversationId == null) {
+                        Log.e(TAG, "Cannot toggle auto-reply: conversation ID is null");
+                        if (callback != null) {
+                            callback.onStatusChanged(false);
+                        }
+                        return;
+                    }
+
+                    // Try to get context from weak reference first
+                    Context context = contextRef.get();
+
+                    // If weak reference is null, fall back to application context
+                    if (context == null) {
+                        context = applicationContext;
+                        Log.d(TAG, "Using application context as fallback for toggle");
+                    }
+
+                    // If both references are null, we can't proceed
+                    if (context == null) {
+                        Log.e(TAG, "Context is null when toggling auto-reply state");
+                        if (callback != null) {
+                            callback.onStatusChanged(false);
+                        }
+                        return;
+                    }
+                    AppDatabase db = AppDatabase.getDatabase(context);
+                    AutoReplySettingsDao settingsDao = db.autoReplySettingsDao();
+                    AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
+
+                    boolean currentState = settings != null && settings.isDisabled();
+
+                    Log.d(TAG, "Toggling auto-reply state from " + (currentState ? "disabled" : "enabled") +
+                          " to " + (!currentState ? "disabled" : "enabled") +
+                          "\nConversation ID: " + conversationId);
+
+                    settingsDao.upsertBlocking(new AutoReplySettings(
+                        conversationId,
+                        !currentState,
+                        System.currentTimeMillis()));
+
+                    if (callback != null) {
+                        callback.onStatusChanged(!currentState);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error in toggleAutoReply task", e);
+                    if (callback != null) {
+                        callback.onStatusChanged(false); // Default to enabled state on error
+                    }
                 }
-                return;
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to execute task in toggleAutoReply", e);
+            if (callback != null) {
+                callback.onStatusChanged(false); // Default to enabled state on error
             }
-
-            // Try to get context from weak reference first
-            Context context = contextRef.get();
-
-            // If weak reference is null, fall back to application context
-            if (context == null) {
-                context = applicationContext;
-                Log.d(TAG, "Using application context as fallback for toggle");
-            }
-
-            // If both references are null, we can't proceed
-            if (context == null) {
-                Log.e(TAG, "Context is null when toggling auto-reply state");
-                if (callback != null) {
-                    callback.onStatusChanged(false);
-                }
-                return;
-            }
-            AppDatabase db = AppDatabase.getDatabase(context);
-            AutoReplySettingsDao settingsDao = db.autoReplySettingsDao();
-            AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
-
-            boolean currentState = settings != null && settings.isDisabled();
-
-            Log.d(TAG, "Toggling auto-reply state from " + (currentState ? "disabled" : "enabled") +
-                      " to " + (!currentState ? "disabled" : "enabled") +
-                      "\nConversation ID: " + conversationId);
-
-            settingsDao.upsertBlocking(new AutoReplySettings(
-                conversationId,
-                !currentState,
-                System.currentTimeMillis()));
-
-            callback.onStatusChanged(!currentState);
-        });
+        }
     }
 
     public void isAutoReplyDisabled(String packageName, String phoneNumber, String titlePrefix, AutoReplyCallback callback) {
-        // Check if executor is null and recreate if necessary
-        if (executor == null) {
-            Log.w(TAG, "Executor was null in isAutoReplyDisabled, recreating it");
-            executor = Executors.newSingleThreadExecutor();
+        // Add validation logging first, in case we need to return early
+        Log.d(TAG, "isAutoReplyDisabled called with:" +
+                  "\nPackage: " + packageName +
+                  "\nPhone: " + phoneNumber +
+                  "\nTitle Prefix: " + titlePrefix);
+
+        // Synchronize to prevent race conditions when checking/recreating executor
+        synchronized (AutoReplyManager.class) {
+            // Check if executor is null and recreate if necessary
+            if (executor == null) {
+                Log.w(TAG, "Executor was null in isAutoReplyDisabled, recreating it");
+                try {
+                    executor = Executors.newSingleThreadExecutor();
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to create executor", e);
+                }
+            }
         }
 
         // Use final reference to avoid potential race conditions
@@ -221,53 +270,61 @@ public class AutoReplyManager {
             return;
         }
 
-        currentExecutor.execute(() -> {
-            // Try to get context from weak reference first
-            Context context = contextRef.get();
+        try {
+            currentExecutor.execute(() -> {
+                try {
+                    // Try to get context from weak reference first
+                    Context context = contextRef.get();
 
-            // Add validation logging
-            Log.d(TAG, "isAutoReplyDisabled called with:" +
-                      "\nPackage: " + packageName +
-                      "\nPhone: " + phoneNumber +
-                      "\nTitle Prefix: " + titlePrefix);
+                    // If weak reference is null, fall back to application context
+                    if (context == null) {
+                        context = applicationContext;
+                        Log.d(TAG, "Using application context as fallback");
+                    }
 
-            // If weak reference is null, fall back to application context
-            if (context == null) {
-                context = applicationContext;
-                Log.d(TAG, "Using application context as fallback");
-            }
+                    // If both references are null, we can't proceed
+                    if (context == null) {
+                        Log.e(TAG, "Context is null when checking auto-reply state");
+                        if (callback != null) {
+                            // Default to enabled state when context is null
+                            callback.onStatusChanged(false);
+                        }
+                        return;
+                    }
 
-            // If both references are null, we can't proceed
-            if (context == null) {
-                Log.e(TAG, "Context is null when checking auto-reply state");
-                if (callback != null) {
-                    // Default to enabled state when context is null
-                    callback.onStatusChanged(false);
+                    String conversationId = ConversationIdGenerator.generate(packageName, phoneNumber, titlePrefix);
+
+                    Log.d(TAG, "Checking auto-reply state for conversation:" +
+                          "\nID: " + conversationId +
+                          "\nOriginal Title: " + titlePrefix);
+
+                    AutoReplySettingsDao settingsDao = AppDatabase.getDatabase(context).autoReplySettingsDao();
+                    AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
+
+                    boolean isDisabled = settings != null && settings.isDisabled();
+
+                    Log.d(TAG, "Checking auto-reply state: " + (isDisabled ? "disabled" : "enabled") +
+                          "\nPackage: " + packageName +
+                          "\nPhone: " + phoneNumber +
+                          "\nTitle Prefix: " + titlePrefix +
+                          "\nConversation ID: " + conversationId);
+
+                    if (callback != null) {
+                        callback.onStatusChanged(isDisabled);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error in isAutoReplyDisabled task", e);
+                    if (callback != null) {
+                        callback.onStatusChanged(false); // Default to enabled state on error
+                    }
                 }
-                return;
-            }
-
-            String conversationId = ConversationIdGenerator.generate(packageName, phoneNumber, titlePrefix);
-
-            Log.d(TAG, "Checking auto-reply state for conversation:" +
-                      "\nID: " + conversationId +
-                      "\nOriginal Title: " + titlePrefix);
-
-            AutoReplySettingsDao settingsDao = AppDatabase.getDatabase(context).autoReplySettingsDao();
-            AutoReplySettings settings = settingsDao.getByConversationIdBlocking(conversationId);
-
-            boolean isDisabled = settings != null && settings.isDisabled();
-
-            Log.d(TAG, "Checking auto-reply state: " + (isDisabled ? "disabled" : "enabled") +
-                      "\nPackage: " + packageName +
-                      "\nPhone: " + phoneNumber +
-                      "\nTitle Prefix: " + titlePrefix +
-                      "\nConversation ID: " + conversationId);
-
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to execute task in isAutoReplyDisabled", e);
             if (callback != null) {
-                callback.onStatusChanged(isDisabled);
+                callback.onStatusChanged(false); // Default to enabled state on error
             }
-        });
+        }
     }
 
     private static class ExtractedInfo {
@@ -300,30 +357,43 @@ public class AutoReplyManager {
 
     public void shutdown() {
         Log.d(TAG, "Shutting down AutoReplyManager");
-        ExecutorService executorToShutdown = executor;
+
+        // Use a local reference to avoid race conditions
+        ExecutorService executorToShutdown = null;
+
+        synchronized (AutoReplyManager.class) {
+            executorToShutdown = executor;
+            executor = null; // Clear the reference immediately to prevent new tasks
+        }
+
         if (executorToShutdown != null) {
             try {
                 // First attempt to finish any pending operations
                 executorToShutdown.submit(() -> {}).get();
                 executorToShutdown.shutdown();
+                Log.d(TAG, "Executor service shutdown completed normally");
             } catch (Exception e) {
                 Log.e(TAG, "Error during shutdown", e);
-                e.printStackTrace();
 
                 // Force shutdown if there was an error
                 try {
                     executorToShutdown.shutdownNow();
+                    Log.d(TAG, "Forced executor service shutdown");
                 } catch (Exception e2) {
                     Log.e(TAG, "Error during forced shutdown", e2);
                 }
             }
-            executor = null;
+        } else {
+            Log.d(TAG, "No executor service to shut down");
         }
+
         // Clear references
         contextRef.clear();
         // Don't clear application context as it's needed for the singleton
         // applicationContext = null;
         currentNotification = null;
         autoReplyMenuItem = null;
+
+        Log.d(TAG, "AutoReplyManager shutdown complete");
     }
 }

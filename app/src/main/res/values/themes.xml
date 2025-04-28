@@ -64,10 +64,11 @@
     </style>
 
     <style name="ChatToolbarStyle" parent="Widget.MaterialComponents.Toolbar">
-        <item name="android:background">@color/white</item>
+        <item name="android:background">@android:color/transparent</item>
         <item name="titleTextColor">@color/black</item>
         <item name="navigationIconTint">@color/black</item>
         <item name="titleTextAppearance">@style/ChatToolbarTitleStyle</item>
+        <item name="android:elevation">0dp</item>
     </style>
 
     <style name="ChatToolbarTitleStyle" parent="TextAppearance.MaterialComponents.Headline6">
