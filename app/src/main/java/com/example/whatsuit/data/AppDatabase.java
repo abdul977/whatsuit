@@ -12,6 +12,7 @@ import com.example.whatsuit.data.migrations.Migration8To9;
 import com.example.whatsuit.data.migrations.Migration9To10;
 import com.example.whatsuit.data.migrations.Migration10To11;
 import com.example.whatsuit.data.migrations.Migration11To12;
+import com.example.whatsuit.data.migrations.Migration12To13;
 
 @Database(
     entities = {
@@ -20,19 +21,21 @@ import com.example.whatsuit.data.migrations.Migration11To12;
         ConversationHistory.class,
         PromptTemplate.class,
         AppSettingEntity.class,
-        KeywordActionEntity.class
+        KeywordActionEntity.class,
+        ConversationReplyCount.class
     },
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
     private static volatile AppDatabase INSTANCE;
-    
+
     public abstract NotificationDao notificationDao();
     public abstract GeminiDao geminiDao();
     public abstract AppSettingDao appSettingDao();
     public abstract ConversationHistoryDao conversationHistoryDao();
     public abstract KeywordActionDao keywordActionDao();
+    public abstract ConversationReplyCountDao conversationReplyCountDao();
 
     static final Migration MIGRATION_1_2 = new Migration(1, 2) {
         @Override
@@ -110,17 +113,17 @@ public abstract class AppDatabase extends RoomDatabase {
                 "CREATE TABLE IF NOT EXISTS app_settings (" +
                 "packageName TEXT PRIMARY KEY NOT NULL, " +
                 "appName TEXT NOT NULL, " +
-                "autoReplyEnabled INTEGER NOT NULL DEFAULT 0)" 
+                "autoReplyEnabled INTEGER NOT NULL DEFAULT 0)"
             );
         }
     };
-    
+
     static final Migration MIGRATION_4_5 = new Migration(4, 5) {
         @Override
         public void migrate(SupportSQLiteDatabase database) {
             // Add conversationId column if it doesn't exist
             database.execSQL("ALTER TABLE notifications ADD COLUMN conversationId TEXT");
-            
+
             // Update existing records with generated thread IDs
             database.execSQL(
                 "UPDATE notifications " +
@@ -132,7 +135,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 "END " +
                 "WHERE conversationId IS NULL"
             );
-            
+
             // Create index for faster lookups
             database.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_notifications_conversationId " +
@@ -140,13 +143,13 @@ public abstract class AppDatabase extends RoomDatabase {
             );
         }
     };
-    
+
     static final Migration MIGRATION_5_6 = new Migration(5, 6) {
         @Override
         public void migrate(SupportSQLiteDatabase database) {
             // Drop and recreate conversation_history table with all required columns
             database.execSQL("DROP TABLE IF EXISTS conversation_history_temp");
-            
+
             // Create new table with all columns
             database.execSQL(
                 "CREATE TABLE IF NOT EXISTS conversation_history_temp (" +
@@ -160,20 +163,20 @@ public abstract class AppDatabase extends RoomDatabase {
                 "FOREIGN KEY (notificationId) REFERENCES notifications(id) ON DELETE CASCADE" +
                 ")"
             );
-            
+
             // Copy data from old table
             database.execSQL(
                 "INSERT INTO conversation_history_temp (isModified, conversationId, response, notificationId, id, message, timestamp) " +
                 "SELECT 0, conversationId, response, notificationId, id, message, timestamp " +
                 "FROM conversation_history"
             );
-            
+
             // Drop old table
             database.execSQL("DROP TABLE conversation_history");
-            
+
             // Rename new table to original name
             database.execSQL("ALTER TABLE conversation_history_temp RENAME TO conversation_history");
-            
+
             // Recreate indices
             database.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_conversation_history_notificationId " +
@@ -192,7 +195,7 @@ public abstract class AppDatabase extends RoomDatabase {
             // Add autoReplyDisabled column to notifications table
             database.execSQL("ALTER TABLE notifications " +
                            "ADD COLUMN autoReplyDisabled INTEGER NOT NULL DEFAULT 0");
-            
+
             // Set default value for existing records
             database.execSQL("UPDATE notifications SET autoReplyDisabled = 0");
         }
@@ -218,12 +221,13 @@ public abstract class AppDatabase extends RoomDatabase {
                             new Migration8To9(),
                             new Migration9To10(),
                             new Migration10To11(),
-                            new Migration11To12()
+                            new Migration11To12(),
+                            new Migration12To13()
                     )
                     .fallbackToDestructiveMigration()
                     .build();
                 }
-                
+
             }
         }
         return INSTANCE;

@@ -209,6 +209,13 @@ public interface NotificationDao {
         return getNotificationByThreadIdSync(threadId);
     }
 
+    // Synchronous methods for backup/restore
+    @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
+    List<NotificationEntity> getAllNotificationsSync();
+
+    @Insert
+    void insertAll(List<NotificationEntity> notifications);
+
     // Get all notifications with smart grouping
     @androidx.room.RewriteQueriesToDropUnusedColumns
     @Query("WITH GroupedNotifs AS (" +

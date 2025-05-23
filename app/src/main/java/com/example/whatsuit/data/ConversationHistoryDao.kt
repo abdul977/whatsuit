@@ -15,22 +15,22 @@ import androidx.annotation.NonNull
 interface ConversationHistoryDao {
     @Insert
     suspend fun insert(history: ConversationHistory)
-    
+
     /**
      * Non-suspending version of insert for Java interop
      */
     @Insert
     fun insertSync(history: ConversationHistory)
-    
+
     @Update
     suspend fun update(history: ConversationHistory)
-    
+
     @Query("SELECT * FROM conversation_history WHERE id = :id")
     suspend fun getConversationById(id: Long): ConversationHistory?
-    
+
     @Transaction
     @Query("""
-        UPDATE conversation_history 
+        UPDATE conversation_history
         SET message = :newMessage,
             response = :newResponse,
             timestamp = :timestamp,
@@ -43,13 +43,13 @@ interface ConversationHistoryDao {
         newResponse: String,
         timestamp: Long = System.currentTimeMillis()
     )
-    
+
     /**
      * Non-suspending version for Java interop
      */
     @Transaction
     @Query("""
-        UPDATE conversation_history 
+        UPDATE conversation_history
         SET message = :newMessage,
             response = :newResponse,
             timestamp = :timestamp,
@@ -57,19 +57,19 @@ interface ConversationHistoryDao {
         WHERE id = :conversationId
         """)
     fun updateConversationContentSync(conversationId: Long, newMessage: String, newResponse: String, timestamp: Long)
-    
+
     /**
      * Gets conversation history for a notification, sorted by timestamp descending
      */
     @Query("SELECT * FROM conversation_history WHERE notificationId = :notificationId ORDER BY timestamp DESC")
     fun getHistoryForNotification(notificationId: Long): LiveData<List<ConversationHistory>>
-    
+
     @Query("SELECT * FROM conversation_history WHERE notificationId = :notificationId ORDER BY timestamp DESC")
     fun getHistoryForNotificationSync(notificationId: Long): List<ConversationHistory>
-    
+
     @Transaction
     @Query("""
-        SELECT 
+        SELECT
             JSON_GROUP_ARRAY(
                 JSON_OBJECT(
                     'id', id,
@@ -84,13 +84,13 @@ interface ConversationHistoryDao {
         GROUP BY notificationId
     """)
     suspend fun getConversationHistoryAsJson(notificationId: Long): String?
-    
+
     @Query("SELECT * FROM conversation_history WHERE notificationId = :notificationId ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentHistory(notificationId: Long, limit: Int): List<ConversationHistory>
-    
+
     @Query("DELETE FROM conversation_history WHERE notificationId = :notificationId")
     suspend fun deleteHistoryForNotification(notificationId: Long)
-    
+
     @Query("SELECT COUNT(*) FROM conversation_history WHERE notificationId = :notificationId")
     suspend fun getHistoryCount(notificationId: Long): Int
 
@@ -106,11 +106,18 @@ interface ConversationHistoryDao {
     @Query("SELECT * FROM conversation_history WHERE conversationId = :conversationId ORDER BY timestamp DESC LIMIT 1")
     fun getLatestHistoryForConversationSync(conversationId: String): ConversationHistory?
 
+    // Synchronous methods for backup/restore
+    @Query("SELECT * FROM conversation_history ORDER BY timestamp DESC")
+    fun getAllConversationsSync(): List<ConversationHistory>
+
+    @Insert
+    fun insertAll(conversations: List<ConversationHistory>)
+
     /**
      * Updates the analysis for a conversation history entry
      */
     @Query("""
-        UPDATE conversation_history 
+        UPDATE conversation_history
         SET analysis = :analysis,
             analysisTimestamp = :timestamp
         WHERE id = :id

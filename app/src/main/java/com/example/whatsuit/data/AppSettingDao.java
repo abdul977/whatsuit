@@ -31,4 +31,11 @@ public interface AppSettingDao {
 
     @Query("DELETE FROM app_settings WHERE packageName = :packageName")
     void delete(String packageName);
+
+    // Synchronous methods for backup/restore
+    @Query("SELECT * FROM app_settings")
+    List<AppSettingEntity> getAllSettingsSync();
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    void insertAll(List<AppSettingEntity> settings);
 }

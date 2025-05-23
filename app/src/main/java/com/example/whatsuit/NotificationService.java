@@ -65,14 +65,14 @@ public class NotificationService extends NotificationListenerService {
         database = AppDatabase.getDatabase(this);
         initializeGeminiService();
         processedNotifications = getSharedPreferences("processed_notifications", Context.MODE_PRIVATE);
-        
+
         createNotificationChannel();
-        
+
         // Request rebind
         requestRebind();
-        
+
     }
-    
+
     private synchronized void initializeGeminiService() {
         if (geminiInitializing) {
             Log.d(TAG, "Gemini initialization already in progress");
@@ -81,7 +81,7 @@ public class NotificationService extends NotificationListenerService {
 
         geminiInitializing = true;
         geminiService = new GeminiService(this);
-        
+
         try {
             BuildersKt.launch(
                 serviceScope,
@@ -95,7 +95,7 @@ public class NotificationService extends NotificationListenerService {
                             // Call initialize without passing the continuation
                             return geminiService.initialize(cont);
                         });
-                        
+
                         geminiInitialized = result != null && result;
                         Log.d(TAG, "Gemini initialization completed successfully: " + geminiInitialized);
                     } catch (Exception e) {
@@ -118,7 +118,7 @@ public class NotificationService extends NotificationListenerService {
         String key = sbn.getKey();
         long now = System.currentTimeMillis();
         Long lastProcessTime = processingNotifications.putIfAbsent(key, now);
-        
+
         if (lastProcessTime != null && (now - lastProcessTime) < NOTIFICATION_COOLDOWN) {
             Log.d(TAG, "Skipping duplicate notification processing: " + key);
             return false;
@@ -161,9 +161,9 @@ public class NotificationService extends NotificationListenerService {
     private void handleNotification(StatusBarNotification sbn) throws PackageManager.NameNotFoundException {
         Notification notification = sbn.getNotification();
         String packageName = sbn.getPackageName();
-        
+
         Log.d(TAG, "Handling notification from package: " + packageName);
-        
+
         // Get app name
         PackageManager packageManager = getPackageManager();
         ApplicationInfo applicationInfo = packageManager.getApplicationInfo(packageName, 0);
@@ -172,17 +172,17 @@ public class NotificationService extends NotificationListenerService {
         // Extract notification details
         String title = "";
         String content = "";
-        
+
         // Initialize threadId
         String threadId;
-        
+
         if (notification.extras != null) {
             CharSequence titleSequence = notification.extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence textSequence = notification.extras.getCharSequence(Notification.EXTRA_TEXT);
-            
+
             if (titleSequence != null) title = titleSequence.toString();
             if (textSequence != null) content = textSequence.toString();
-            
+
             if (packageName.contains("whatsapp") && title != null && title.matches(".*[0-9+].*")) {
                 String extracted = title.replaceAll("[^0-9+\\-]", "");
                 String phoneNumber = extracted.replaceAll("[^0-9]", "");
@@ -191,11 +191,11 @@ public class NotificationService extends NotificationListenerService {
                 }
             }
         }
-        
+
         // Generate consistent thread ID for the conversation
         threadId = generateThreadId(packageName, title);
 
-        
+
 long id;
         NotificationEntity notificationEntity;
         try {
@@ -208,7 +208,7 @@ long id;
                 sbn.getPostTime(),
                 String.valueOf(sbn.getId())
              );
-            
+
             // Use atomic upsert operation
             id = database.notificationDao().upsertNotification(notificationEntity);
             Log.d(TAG, "Successfully processed notification with ID: " + id);
@@ -229,31 +229,31 @@ long id;
             Log.d(TAG, "App-specific auto-reply enabled for " + packageName + ": " + appSpecificEnabled);
             Log.d(TAG, "App-specific auto-reply for groups enabled for " + packageName + ": " + appSpecificGroupsEnabled);
         }
-        
+
         // Check basic auto-reply conditions without requiring Gemini to be initialized
-        boolean shouldAutoReply = isMessagingApp(packageName) && 
-            globalAutoReplyEnabled && 
+        boolean shouldAutoReply = isMessagingApp(packageName) &&
+            globalAutoReplyEnabled &&
             appSpecificEnabled;
-            
-        Log.d(TAG, "Should auto-reply: " + shouldAutoReply + 
-            " (isMessagingApp=" + isMessagingApp(packageName) + 
-            ", globalEnabled=" + globalAutoReplyEnabled + 
-            ", appEnabled=" + appSpecificEnabled + 
+
+        Log.d(TAG, "Should auto-reply: " + shouldAutoReply +
+            " (isMessagingApp=" + isMessagingApp(packageName) +
+            ", globalEnabled=" + globalAutoReplyEnabled +
+            ", appEnabled=" + appSpecificEnabled +
             ", geminiStatus=" + (geminiInitialized ? "initialized" : "not initialized") + ")");
 
         if (shouldAutoReply) {
             String phoneNumber = "";
             String titlePrefix = "";
-            
+
             if (packageName.contains("whatsapp") && content != null && content.matches(".*[0-9+].*")) {
                 String extracted = content.replaceAll("[^0-9+\\-]", "");
                 phoneNumber = extracted.replaceAll("[^0-9]", "");
             } else if (title != null && !title.isEmpty()) {
                 titlePrefix = title.substring(0, Math.min(5, title.length()));
             }
-            
+
             boolean autoReplyEnabled = !database.notificationDao().isAutoReplyDisabled(packageName, phoneNumber, titlePrefix);
-            
+
             Log.d(TAG, String.format(
                 "Auto-reply conditions met for notification:\n" +
                 "App: %s\n" +
@@ -262,7 +262,7 @@ long id;
                 "Title Prefix: %s\n" +
                 "Auto-reply enabled: %s",
                 appName, content, phoneNumber, titlePrefix, autoReplyEnabled));
-            
+
             if (autoReplyEnabled) {
                 boolean isGroupMessage = isGroupMessage(sbn);
                 if (isGroupMessage && appSpecificGroupsEnabled) {
@@ -278,10 +278,10 @@ long id;
 
     private void updateNotificationWithDeepLink(StatusBarNotification sbn, long id) {
         try {
-            Intent deepLinkIntent = new Intent(Intent.ACTION_VIEW, 
+            Intent deepLinkIntent = new Intent(Intent.ACTION_VIEW,
                 Uri.parse("whatsuit://notification/" + id));
             PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
-                deepLinkIntent, 
+                deepLinkIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
             Notification notification = sbn.getNotification();
@@ -305,7 +305,7 @@ long id;
                        .setContentIntent(pendingIntent);
 
                 notification = builder.build();
-                android.app.NotificationManager notificationManager = 
+                android.app.NotificationManager notificationManager =
                     (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 notificationManager.notify(sbn.getId(), notification);
             }
@@ -322,14 +322,14 @@ long id;
                 return packageName + "_" + phoneNumber;
             }
         }
-        
+
         // For other apps or when no valid phone number, use package name + sanitized title
         return packageName + "_" + (title != null ? title.replaceAll("[^a-zA-Z0-9]", "") : "unknown");
     }
 
     private boolean isMessagingApp(String packageName) {
-        return packageName.contains("whatsapp") || 
-               packageName.contains("messenger") || 
+        return packageName.contains("whatsapp") ||
+               packageName.contains("messenger") ||
                packageName.contains("telegram") ||
                packageName.contains("signal") ||
                packageName.contains("com.android.mms") ||
@@ -353,10 +353,10 @@ long id;
                                 // Check for keyword match first
                                 KeywordActionEntity keywordAction = database.keywordActionDao()
                                     .findMatchingKeyword(notificationEntity.getContent());
-                                
+
                                 if (keywordAction != null && keywordAction.isEnabled()) {
                                     Log.d(TAG, "Found matching keyword action: " + keywordAction.getKeyword());
-                                    handleKeywordAction(action, keywordAction);
+                                    handleKeywordAction(action, keywordAction, notificationEntity);
                                 } else {
                                     // Fall back to Gemini response
                                     Boolean initResult = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (coroutineScope, cont) -> {
@@ -377,11 +377,21 @@ long id;
         }
     }
 
-    private void handleKeywordAction(Notification.Action action, KeywordActionEntity keywordAction) {
+    private void handleKeywordAction(Notification.Action action, KeywordActionEntity keywordAction, NotificationEntity notification) {
+        // Check reply limit before proceeding
+        if (!checkReplyLimit(notification.getConversationId())) {
+            Log.d(TAG, "Reply limit reached for conversation: " + notification.getConversationId());
+            return;
+        }
+
         try {
             if (keywordAction.getActionType().equals("TEXT")) {
                 // Handle text replies directly
                 sendReply(action, keywordAction.getActionContent());
+
+                // Increment reply count for this conversation
+                database.conversationReplyCountDao().incrementReplyCount(notification.getConversationId());
+                Log.d(TAG, "Keyword action reply sent and count incremented for conversation: " + notification.getConversationId());
                 return;
             }
 
@@ -394,7 +404,7 @@ long id;
             // Determine MIME type based on file extension
             String fileName = mediaFile.getName().toLowerCase();
             String mimeType;
-            
+
             if (keywordAction.getActionType().equals("IMAGE")) {
                 if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
                     mimeType = "image/jpeg";
@@ -426,7 +436,7 @@ long id;
 
             boolean isImage = keywordAction.getActionType().equals("IMAGE");
             boolean isVideo = keywordAction.getActionType().equals("VIDEO");
-            
+
             if (!isImage && !isVideo) {
                 Log.e(TAG, "Media type mismatch. File: " + mimeType + ", Action type: " + keywordAction.getActionType());
                 return;
@@ -442,14 +452,14 @@ long id;
             Intent intent = new Intent();
             intent.setClipData(android.content.ClipData.newRawUri("", contentUri));
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            
+
             // Add media type to intent
             intent.setType(mimeType);
-            
+
             // Grant permissions to WhatsApp
-            grantUriPermission("com.whatsapp", contentUri, 
+            grantUriPermission("com.whatsapp", contentUri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            grantUriPermission("com.whatsapp.w4b", contentUri, 
+            grantUriPermission("com.whatsapp.w4b", contentUri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
             // Add to remote input
@@ -460,25 +470,29 @@ long id;
                 whatsappBundle.putParcelable("android.intent.extra.STREAM", contentUri);
                 whatsappBundle.putString("android.intent.extra.MIME_TYPE", mimeType);
                 whatsappBundle.putBoolean("force_attach_media", true);
-                
+
                 // Create the media intent
                 Intent mediaIntent = new Intent();
                 mediaIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 mediaIntent.putExtras(whatsappBundle);
                 mediaIntent.setClipData(android.content.ClipData.newRawUri("", contentUri));
                 mediaIntent.setType(mimeType);
-                
+
                 // Create a wrapper bundle that includes both the media and remote input
                 Bundle wrapperBundle = new Bundle();
                 wrapperBundle.putParcelable(remoteInputs[0].getResultKey(), contentUri);
                 wrapperBundle.putParcelable("media_contents", whatsappBundle);
-                
+
                 // Add results to intent
                 RemoteInput.addResultsToIntent(remoteInputs, mediaIntent, wrapperBundle);
-                
+
                 try {
                     action.actionIntent.send(this, 0, mediaIntent);
                     Log.d(TAG, "Successfully sent WhatsApp media reply: " + keywordAction.getActionContent());
+
+                    // Increment reply count for this conversation
+                    database.conversationReplyCountDao().incrementReplyCount(notification.getConversationId());
+                    Log.d(TAG, "Media keyword action reply sent and count incremented for conversation: " + notification.getConversationId());
                 } catch (PendingIntent.CanceledException e) {
                     Log.e(TAG, "Failed to send WhatsApp media reply", e);
                 }
@@ -496,6 +510,12 @@ long id;
             return;
         }
 
+        // Check reply limit before proceeding
+        if (!checkReplyLimit(notification.getConversationId())) {
+            Log.d(TAG, "Reply limit reached for conversation: " + notification.getConversationId());
+            return;
+        }
+
         geminiService.generateReply(notification.getId(), notification.getContent(), new GeminiService.ResponseCallback() {
             @Override
             public void onPartialResponse(String text) {
@@ -510,17 +530,21 @@ long id;
                     CoroutineStart.DEFAULT,
                     (scope, continuation) -> {
                         try {
-                            // Update notification status atomically
+                            // Update notification status and increment reply count atomically
                             BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (scope2, cont2) -> {
                                 database.runInTransaction(() -> {
                                     notification.setAutoReplied(true);
                                     notification.setAutoReplyContent(fullResponse);
                                     database.notificationDao().update(notification);
+
+                                    // Increment reply count for this conversation
+                                    database.conversationReplyCountDao().incrementReplyCount(notification.getConversationId());
+
                                     return Unit.INSTANCE;
                                 });
                                 return Unit.INSTANCE;
                             });
-                            
+
                             sendReply(replyAction, fullResponse);
                             Log.d(TAG, "Generated and sent full response: " + fullResponse);
                         } catch (Exception e) {
@@ -556,17 +580,48 @@ long id;
         }
     }
 
+    /**
+     * Check if the conversation has reached the reply limit
+     */
+    private boolean checkReplyLimit(String conversationId) {
+        if (conversationId == null || conversationId.isEmpty()) {
+            Log.w(TAG, "Invalid conversation ID for reply limit check");
+            return true; // Allow reply if conversation ID is invalid
+        }
+
+        try {
+            SharedPreferences prefs = getSharedPreferences("whatsuit_settings", Context.MODE_PRIVATE);
+            int maxReplies = prefs.getInt("auto_reply_limit", 4);
+
+            boolean hasReachedLimit = database.conversationReplyCountDao().hasReachedLimit(conversationId, maxReplies);
+
+            if (hasReachedLimit) {
+                Log.d(TAG, String.format("Reply limit reached for conversation %s (limit: %d)",
+                    conversationId, maxReplies));
+                return false;
+            } else {
+                int currentCount = database.conversationReplyCountDao().getCurrentReplyCount(conversationId);
+                Log.d(TAG, String.format("Reply limit check passed for conversation %s (%d/%d)",
+                    conversationId, currentCount, maxReplies));
+                return true;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking reply limit for conversation: " + conversationId, e);
+            return true; // Allow reply on error to avoid blocking legitimate replies
+        }
+    }
+
     private void createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             String channelId = "whatsuit_notification_channel";
             CharSequence channelName = "WhatSuit Notifications";
             String channelDescription = "Channel for WhatSuit notifications";
             int importance = android.app.NotificationManager.IMPORTANCE_DEFAULT;
-            
+
             android.app.NotificationChannel channel = new android.app.NotificationChannel(
                 channelId, channelName, importance);
             channel.setDescription(channelDescription);
-            
+
             android.app.NotificationManager notificationManager = getSystemService(
                 android.app.NotificationManager.class);
             if (notificationManager != null) {
@@ -624,9 +679,9 @@ long id;
         String text = extras.getString("android.text");
         String title = extras.getString("android.title");
 
-        return title.matches(".*\\d+ messages?.*") 
-            || text.contains(":") 
-            || (extras.get("android.people") != null 
+        return title.matches(".*\\d+ messages?.*")
+            || text.contains(":")
+            || (extras.get("android.people") != null
                 && ((String[]) extras.get("android.people")).length > 1);
     }
 }

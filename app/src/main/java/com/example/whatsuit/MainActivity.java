@@ -12,6 +12,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -34,6 +35,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
@@ -54,6 +57,7 @@ import com.example.whatsuit.data.NotificationDao;
 import com.example.whatsuit.data.NotificationEntity;
 import com.example.whatsuit.data.ConversationHistoryDao;
 import com.example.whatsuit.util.AutoReplyManager;
+import com.example.whatsuit.util.BackupRestoreManager;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -90,27 +94,35 @@ public class MainActivity extends AppCompatActivity {
     private long endTime = Long.MAX_VALUE;
     private SearchView searchView;
 
+    // Backup/Restore functionality
+    private BackupRestoreManager backupRestoreManager;
+    private ActivityResultLauncher<String> createBackupLauncher;
+    private ActivityResultLauncher<String[]> selectBackupLauncher;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Install splash screen and keep it visible during initialization
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         splashScreen.setKeepOnScreenCondition(() -> !isAppReady);
-        
+
         super.onCreate(savedInstanceState);
-        
+
+        // Initialize backup/restore functionality
+        initializeBackupRestore();
+
         // Set up our custom splash overlay first
         setContentView(R.layout.splash_screen_overlay);
-        
+
         // Initialize splash screen views
         splashOverlay = findViewById(android.R.id.content);
         splashIcon = findViewById(R.id.splash_icon);
         splashProgress = findViewById(R.id.splash_progress);
         splashText = findViewById(R.id.splash_text);
-        
+
         // Start initialization process in background
         initializeApp();
     }
-    
+
     private void initializeApp() {
         // Simulate app initialization in background thread
         new Thread(() -> {
@@ -119,7 +131,7 @@ public class MainActivity extends AppCompatActivity {
                 AppDatabase db = null;
                 int retryCount = 0;
                 final int MAX_RETRIES = 3;
-                
+
                 while (retryCount < MAX_RETRIES && db == null) {
                     try {
                         db = AppDatabase.getDatabase(this);
@@ -133,14 +145,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                
+
                 if (db == null) {
                     throw new RuntimeException("Failed to initialize database after " + MAX_RETRIES + " attempts");
                 }
 
                 notificationDao = db.notificationDao();
                 conversationHistoryDao = db.conversationHistoryDao();
-                
+
                 // Initialize managers with error handling
                 try {
                     autoReplyManager = new AutoReplyManager(this);
@@ -148,10 +160,10 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("MainActivity", "AutoReplyManager initialization failed", e);
                     // Continue without auto-reply functionality
                 }
-                
+
                 // Delay for splash animation
                 Thread.sleep(1200);
-                
+
                 // Signal successful completion
                 new Handler(Looper.getMainLooper()).post(() -> {
                     startSplashAnimations();
@@ -178,19 +190,19 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
-    
+
     private void startSplashAnimations() {
         // Mark app as ready (this removes the system splash screen)
         isAppReady = true;
-        
+
         // Start pulse animation on icon
         ObjectAnimator scaleX = ObjectAnimator.ofFloat(splashIcon, View.SCALE_X, 1f, 1.2f, 1f);
         ObjectAnimator scaleY = ObjectAnimator.ofFloat(splashIcon, View.SCALE_Y, 1f, 1.2f, 1f);
-        
+
         AnimatorSet pulseSet = new AnimatorSet();
         pulseSet.playTogether(scaleX, scaleY);
         pulseSet.setDuration(1000);
-        
+
         // After pulse, trigger particle animation
         pulseSet.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -198,16 +210,16 @@ public class MainActivity extends AppCompatActivity {
                 // Hide progress and text
                 splashProgress.animate().alpha(0f).setDuration(300).start();
                 splashText.animate().alpha(0f).setDuration(300).start();
-                
+
                 // Create particle animation
                 createParticleEffect();
             }
         });
-        
+
         // Start the animation sequence
         pulseSet.start();
     }
-    
+
     private void createParticleEffect() {
         // Simple fade out animation
         ObjectAnimator fadeOut = ObjectAnimator.ofFloat(splashIcon, View.ALPHA, 1f, 0f);
@@ -220,12 +232,12 @@ public class MainActivity extends AppCompatActivity {
         });
         fadeOut.start();
     }
-    
+
     private void switchToMainContent() {
         // Enable edge-to-edge and set main layout
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        
+
         // Initialize views from regular layout
         recyclerView = findViewById(R.id.notificationsRecyclerView);
         filterChipGroup = findViewById(R.id.filterChipGroup);
@@ -234,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
         fab = findViewById(R.id.fab);
         appBarLayout = findViewById(R.id.appBarLayout);
         searchView = findViewById(R.id.searchView);
-        
+
         // Hide all initially for animation
         appBarLayout.setAlpha(0f);
         recyclerView.setAlpha(0f);
@@ -243,26 +255,26 @@ public class MainActivity extends AppCompatActivity {
             fab.setScaleX(0f);
             fab.setScaleY(0f);
         }
-        
+
         // Get the center point for circular reveal
         View rootView = findViewById(android.R.id.content);
-        
+
         // Wait for layout to be ready
         rootView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
             public boolean onPreDraw() {
                 rootView.getViewTreeObserver().removeOnPreDrawListener(this);
-                
+
                 // Perform circular reveal animation
                 int cx = rootView.getWidth() / 2;
                 int cy = rootView.getHeight() / 2;
                 float finalRadius = (float) Math.hypot(cx, cy);
-                
+
                 Animator circularReveal = ViewAnimationUtils.createCircularReveal(
                         rootView, cx, cy, 0f, finalRadius);
                 circularReveal.setDuration(800);
                 circularReveal.setInterpolator(new DecelerateInterpolator());
-                
+
                 circularReveal.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
@@ -270,20 +282,20 @@ public class MainActivity extends AppCompatActivity {
                         animateUIElements();
                     }
                 });
-                
+
                 circularReveal.start();
                 return true;
             }
         });
     }
-    
+
     private void animateUIElements() {
         // Animate toolbar first
         appBarLayout.animate()
             .alpha(1f)
             .setDuration(300)
             .start();
-        
+
         // Animate recyclerView with delay
         recyclerView.animate()
             .alpha(1f)
@@ -291,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
             .setDuration(500)
             .setStartDelay(150)
             .start();
-        
+
         // Animate FAB with additional delay and overshoot
         if (fab != null) {
             fab.animate()
@@ -302,45 +314,45 @@ public class MainActivity extends AppCompatActivity {
                 .setInterpolator(new OvershootInterpolator())
                 .start();
         }
-        
+
         // Continue with regular MainActivity initialization
         finishMainActivityInitialization();
     }
-    
+
     private void finishMainActivityInitialization() {
         // Set up notifications RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         notificationAdapter = new GroupedNotificationAdapter(getPackageManager(), autoReplyManager);
         recyclerView.setAdapter(notificationAdapter);
-        
+
         // Set up swipe to refresh
         swipeRefresh.setOnRefreshListener(() -> {
             loadNotifications();
             swipeRefresh.setRefreshing(false);
         });
-        
+
         // Set up collapsing toolbar behavior
         setupCollapsingToolbar();
-        
+
         // FAB click listener
         if (fab != null) {
             fab.setOnClickListener(v -> showOptionsMenu());
         }
-        
+
         // Check for notification access permission
         if (!isNotificationServiceEnabled()) {
             showNotificationAccessDialog();
         }
-        
+
         // Setup app filter
         setupAppFilter();
-        
+
         // Setup search view
         setupSearchView();
-        
+
         // Load notifications
         loadNotifications();
-        
+
         // Handle window insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -377,11 +389,11 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             final AppDatabase db = AppDatabase.getDatabase(this);
             final long notificationId = notification.getId();
-            
+
             // Get conversation history directly using Room's synchronous query
             final List<ConversationHistory> history = db.getConversationHistoryDao()
                     .getHistoryForNotificationSync(notificationId);
-            
+
             // Update UI on main thread
             runOnUiThread(() -> {
                 if (history != null && !history.isEmpty()) {
@@ -411,6 +423,12 @@ public class MainActivity extends AppCompatActivity {
         int itemId = item.getItemId();
         if (itemId == R.id.action_filter) {
             showTimeFilterDialog();
+            return true;
+        } else if (itemId == R.id.action_backup) {
+            showBackupDialog();
+            return true;
+        } else if (itemId == R.id.action_restore) {
+            showRestoreDialog();
             return true;
         } else if (itemId == R.id.action_gemini_config) {
             startActivity(new Intent(this, GeminiConfigActivity.class));
@@ -632,44 +650,44 @@ public class MainActivity extends AppCompatActivity {
                 .setCancelable(false)
                 .show();
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
-        
+
         // Check notification permission and restart service if needed
         if (isNotificationServiceEnabled()) {
             ensureNotificationServiceRunning();
         }
     }
-    
+
     private void ensureNotificationServiceRunning() {
         // Toggle notification listener service to ensure it gets rebound
         toggleNotificationListenerService();
-        
+
         // Start service explicitly
         Intent serviceIntent = new Intent(this, NotificationService.class);
         startService(serviceIntent);
-        
+
         Log.d("MainActivity", "Ensuring notification service is running");
     }
-    
+
     private void toggleNotificationListenerService() {
         // This is a workaround to force Android to rebind the notification listener service
         // Toggling the enabled state forces Android to rebind the service
         ComponentName componentName = new ComponentName(this, NotificationService.class);
-        
+
         // Get package manager
         PackageManager pm = getPackageManager();
-        
+
         // Disable component
         pm.setComponentEnabledSetting(componentName,
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
-        
+
         // Enable component
         pm.setComponentEnabledSetting(componentName,
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
-        
+
         Log.d("MainActivity", "Toggled notification listener service");
     }
 
@@ -716,7 +734,7 @@ public class MainActivity extends AppCompatActivity {
                     final ConversationHistory history = AppDatabase.getDatabase(this)
                         .getConversationHistoryDao()
                         .getLatestHistoryForConversationSync(notification.getConversationId());
-                    
+
                     // Update UI on main thread
                     runOnUiThread(() -> {
                         if (history != null) {
@@ -762,7 +780,7 @@ public class MainActivity extends AppCompatActivity {
                 final ConversationHistory history = AppDatabase.getDatabase(this)
                     .getConversationHistoryDao()
                     .getLatestHistoryForConversationSync(notification.getConversationId());
-                
+
                 runOnUiThread(() -> {
                     if (history != null) {
                         if (history.getAnalysis() == null) {
@@ -783,7 +801,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
 
         // Re-analyze button click handler
-        reAnalyzeButton.setOnClickListener(v -> 
+        reAnalyzeButton.setOnClickListener(v ->
             performAnalysis(notification.getConversationId(), updateAnalysis));
 
         dialog.show();
@@ -800,14 +818,14 @@ public class MainActivity extends AppCompatActivity {
                 public void onComplete(String fullResponse) {
                     runOnUiThread(() -> {
                         onComplete.run();
-                        Toast.makeText(MainActivity.this, 
+                        Toast.makeText(MainActivity.this,
                             "Analysis complete", Toast.LENGTH_SHORT).show();
                     });
                 }
 
                 @Override
                 public void onError(Throwable error) {
-                    runOnUiThread(() -> 
+                    runOnUiThread(() ->
                         Toast.makeText(MainActivity.this,
                             "Analysis failed: " + error.getMessage(),
                             Toast.LENGTH_LONG).show());
@@ -817,7 +835,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showOptionsMenu() {
-        String[] options = {"Clear All", "Auto-Reply Settings", "Keyword Actions", "Gemini Configuration", "Settings", "About"};
+        String[] options = {"Clear All", "Auto-Reply Settings", "Keyword Actions", "Gemini Configuration", "Backup Data", "Restore Data", "About"};
         new AlertDialog.Builder(this)
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -834,9 +852,12 @@ public class MainActivity extends AppCompatActivity {
                             startActivity(new Intent(this, GeminiConfigActivity.class));
                             break;
                         case 4:
-                            // TODO: Open general settings
+                            showBackupDialog();
                             break;
                         case 5:
+                            showRestoreDialog();
+                            break;
+                        case 6:
                             showAboutDialog();
                             break;
                     }
@@ -872,6 +893,174 @@ public class MainActivity extends AppCompatActivity {
             .replaceAll("\n{3,}", "\n\n")     // Normalize multiple line breaks
             .replaceAll("(?m)^\\s*([A-Z][^.!?:]*(?:[.!?:]\\s*)?)$", "\n$1\n") // Add spacing around headings
             .trim();
+    }
+
+    private void initializeBackupRestore() {
+        backupRestoreManager = new BackupRestoreManager(this);
+
+        // Initialize file picker for creating backup
+        createBackupLauncher = registerForActivityResult(
+            new ActivityResultContracts.CreateDocument("application/zip"),
+            uri -> {
+                if (uri != null) {
+                    performBackup(uri);
+                }
+            }
+        );
+
+        // Initialize file picker for selecting backup to restore
+        selectBackupLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(),
+            uri -> {
+                if (uri != null) {
+                    performRestore(uri);
+                }
+            }
+        );
+    }
+
+    private void showBackupDialog() {
+        new AlertDialog.Builder(this)
+            .setTitle("Create Backup")
+            .setMessage("This will create a backup of all your application data including:\n\n" +
+                       "• All notifications\n" +
+                       "• Conversation history\n" +
+                       "• App settings\n" +
+                       "• Gemini configuration\n" +
+                       "• Keyword actions\n" +
+                       "• Media files\n\n" +
+                       "Choose a location to save the backup file.")
+            .setPositiveButton("Create Backup", (dialog, which) -> {
+                String fileName = "WhatSuit_Backup_" +
+                    new java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.getDefault())
+                        .format(new java.util.Date()) + ".zip";
+                createBackupLauncher.launch(fileName);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void showRestoreDialog() {
+        new AlertDialog.Builder(this)
+            .setTitle("Restore from Backup")
+            .setMessage("⚠️ WARNING: This will replace ALL current data with data from the backup file.\n\n" +
+                       "Current data that will be replaced:\n" +
+                       "• All notifications\n" +
+                       "• Conversation history\n" +
+                       "• App settings\n" +
+                       "• Gemini configuration\n" +
+                       "• Keyword actions\n" +
+                       "• Media files\n\n" +
+                       "This action cannot be undone. Consider creating a backup first.")
+            .setPositiveButton("Select Backup File", (dialog, which) -> {
+                selectBackupLauncher.launch(new String[]{"application/zip", "application/octet-stream"});
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void performBackup(Uri destinationUri) {
+        // Show progress dialog
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+            .setTitle("Creating Backup")
+            .setMessage("Preparing backup...")
+            .setCancelable(false)
+            .create();
+        progressDialog.show();
+
+        backupRestoreManager.createBackup(destinationUri, new BackupRestoreManager.BackupRestoreCallback() {
+            @Override
+            public void onProgress(String message, int progress) {
+                runOnUiThread(() -> {
+                    progressDialog.setMessage(message + " (" + progress + "%)");
+                });
+            }
+
+            @Override
+            public void onSuccess(String message) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Backup Successful")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show();
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Backup Failed")
+                        .setMessage(error)
+                        .setPositiveButton("OK", null)
+                        .show();
+                });
+            }
+        });
+    }
+
+    private void performRestore(Uri backupUri) {
+        // Show final confirmation
+        new AlertDialog.Builder(this)
+            .setTitle("Final Confirmation")
+            .setMessage("Are you absolutely sure you want to restore from this backup?\n\n" +
+                       "This will permanently replace all current data and cannot be undone.")
+            .setPositiveButton("Yes, Restore", (dialog, which) -> {
+                // Show progress dialog
+                AlertDialog progressDialog = new AlertDialog.Builder(this)
+                    .setTitle("Restoring Backup")
+                    .setMessage("Extracting backup...")
+                    .setCancelable(false)
+                    .create();
+                progressDialog.show();
+
+                backupRestoreManager.restoreBackup(backupUri, new BackupRestoreManager.BackupRestoreCallback() {
+                    @Override
+                    public void onProgress(String message, int progress) {
+                        runOnUiThread(() -> {
+                            progressDialog.setMessage(message + " (" + progress + "%)");
+                        });
+                    }
+
+                    @Override
+                    public void onSuccess(String message) {
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+                            new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Restore Successful")
+                                .setMessage(message + "\n\nThe app will now restart to apply the changes.")
+                                .setPositiveButton("Restart App", (d, w) -> {
+                                    // Restart the app
+                                    Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                                    if (intent != null) {
+                                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        startActivity(intent);
+                                        finish();
+                                    }
+                                })
+                                .setCancelable(false)
+                                .show();
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+                            new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Restore Failed")
+                                .setMessage(error)
+                                .setPositiveButton("OK", null)
+                                .show();
+                        });
+                    }
+                });
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     @Override
